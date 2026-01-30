@@ -1,10 +1,12 @@
-# app/crud/submission/crud_submission.py
-
-from sqlalchemy.orm import Session
+# src/app/crud/submission/crud_submission.py
 from typing import List, Optional
+from uuid import UUID
+
+from sqlalchemy.orm import Session, selectinload
 
 from app.crud.base.crud_base import CRUDBase
 from app.models.submission.submission import Submission
+from app.models.submission.submission_value import SubmissionValue
 from app.schemas.submission.submission_create import SubmissionCreate
 from app.schemas.submission.submission_update import (
     SubmissionUpdate,
@@ -15,33 +17,37 @@ from app.schemas.submission.submission_update import (
 
 class CRUDSubmission(CRUDBase[Submission]):
     """
-    Submission CRUD
+    Submission CRUD (v1)
     -------------------------------------------------
-    用途：
-    - 活動報名主資料
-    - 一次提交對應多個 SubmissionValue
+    核心語意：
+    - submitted_by_* : 報名動作執行者（登入使用者）
+    - user_email     : 實際參加者 / 被報名者
     """
 
     # -------------------------------------------------
-    # 建立 Submission（Public）
+    # 建立 Submission
     # -------------------------------------------------
     def create(
         self,
         db: Session,
         data: SubmissionCreate,
         *,
-        creator_uuid: str | None = None,
+        submitted_by_uuid: UUID | None = None,
+        submitted_by_email: str | None = None,
         creator_role: str | None = None,
     ) -> Submission:
         obj_in = data.model_dump()
-        if creator_uuid:
-            obj_in["created_by"] = creator_uuid
+
+        if submitted_by_uuid:
+            obj_in["submitted_by_uuid"] = submitted_by_uuid
+            obj_in["submitted_by_email"] = submitted_by_email
+            obj_in["created_by"] = submitted_by_uuid
             obj_in["created_by_role"] = creator_role
 
         return super().create(db, obj_in=obj_in)
-    
+
     # -------------------------------------------------
-    # 一般更新（notes / extra_data / status）
+    # 一般更新
     # -------------------------------------------------
     def update(
         self,
@@ -49,10 +55,11 @@ class CRUDSubmission(CRUDBase[Submission]):
         db_obj: Submission,
         data: SubmissionUpdate,
         *,
-        updater_uuid: str | None = None,
+        updater_uuid: UUID | None = None,
         updater_role: str | None = None,
     ) -> Submission:
         obj_in = data.model_dump(exclude_unset=True)
+
         if updater_uuid:
             obj_in["updated_by"] = updater_uuid
             obj_in["updated_by_role"] = updater_role
@@ -60,7 +67,7 @@ class CRUDSubmission(CRUDBase[Submission]):
         return super().update(db, db_obj=db_obj, obj_in=obj_in)
 
     # -------------------------------------------------
-    # 更新狀態（流程用）
+    # 更新狀態（流程 / 系統用）
     # -------------------------------------------------
     def update_status(
         self,
@@ -68,7 +75,7 @@ class CRUDSubmission(CRUDBase[Submission]):
         db_obj: Submission,
         data: SubmissionStatusUpdate,
         *,
-        updater_uuid: str | None = None,
+        updater_uuid: UUID | None = None,
         updater_role: str | None = None,
     ) -> Submission:
         obj_in = {
@@ -81,14 +88,14 @@ class CRUDSubmission(CRUDBase[Submission]):
             obj_in["updated_by_role"] = updater_role
 
         return super().update(db, db_obj=db_obj, obj_in=obj_in)
-    
-     # -------------------------------------------------
+
+    # -------------------------------------------------
     # 依 UUID 取得（共用）
     # -------------------------------------------------
     def get_by_uuid(
         self,
         db: Session,
-        uuid: str,
+        uuid: UUID,
     ) -> Optional[Submission]:
         return (
             db.query(self.model)
@@ -100,7 +107,7 @@ class CRUDSubmission(CRUDBase[Submission]):
         )
 
     # -------------------------------------------------
-    # 依 submission_code 查詢（Public tracking）
+    # Public tracking（依 submission_code）
     # -------------------------------------------------
     def get_by_code(
         self,
@@ -116,18 +123,79 @@ class CRUDSubmission(CRUDBase[Submission]):
             .first()
         )
 
-    # -------------------------------------------------
-    # 使用者自己的 submissions
-    # -------------------------------------------------
-    def list_by_user_uuid(
+    # =================================================
+    # ⭐ 我提交的 submissions（submitter 視角）
+    # =================================================
+    def list_by_submitter(
         self,
         db: Session,
-        user_uuid: str,
+        *,
+        submitted_by_uuid: UUID,
     ) -> List[Submission]:
+        """
+        /users/me/submissions
+        - 我「提交」的報名紀錄
+        """
+        return (
+            db.query(self.model)
+            .options(
+                selectinload(self.model.event),
+            )
+            .filter(
+                self.model.submitted_by_uuid == submitted_by_uuid,
+                self.model.is_deleted == False,
+                self.model.is_active == True,
+            )
+            .order_by(self.model.created_at.desc())
+            .all()
+        )
+
+    # -------------------------------------------------
+    # 單筆（submitter ownership）
+    # -------------------------------------------------
+    def get_by_uuid_and_submitter(
+        self,
+        db: Session,
+        *,
+        submission_uuid: UUID,
+        submitted_by_uuid: UUID,
+    ) -> Optional[Submission]:
+        return (
+            db.query(self.model)
+            .options(
+                selectinload(self.model.event),
+                selectinload(self.model.values)
+                    .selectinload(SubmissionValue.field),
+                selectinload(self.model.values)
+                    .selectinload(SubmissionValue.files),
+            )
+            .filter(
+                self.model.uuid == submission_uuid,
+                self.model.submitted_by_uuid == submitted_by_uuid,
+                self.model.is_deleted == False,
+                self.model.is_active == True,
+            )
+            .first()
+        )
+
+    # =================================================
+    # ⚠️ Legacy / Transitional
+    # =================================================
+    def list_by_identity_fallback(
+        self,
+        db: Session,
+        *,
+        user_email: str,
+    ) -> List[Submission]:
+        """
+        僅用於：
+        - email 驗證
+        - 舊資料補齊
+        """
         return (
             db.query(self.model)
             .filter(
-                self.model.user_uuid == user_uuid,
+                self.model.user_email == user_email,
                 self.model.is_deleted == False,
             )
             .order_by(self.model.created_at.desc())
@@ -135,36 +203,14 @@ class CRUDSubmission(CRUDBase[Submission]):
         )
 
     # -------------------------------------------------
-    # Admin：依 event + status 列表
-    # -------------------------------------------------
-    def list_submissions_by_event(
-        self,
-        db: Session,
-        event_uuid: str,
-        status: str | None = None,
-    ) -> List[Submission]:
-        q = (
-            db.query(self.model)
-            .filter(
-                self.model.event_uuid == event_uuid,
-                self.model.is_deleted == False,
-            )
-        )
-
-        if status:
-            q = q.filter(self.model.status == status)
-
-        return q.order_by(self.model.created_at.desc()).all()
-
-    # -------------------------------------------------
-    # Soft delete（流程刪除）
+    # Soft delete
     # -------------------------------------------------
     def soft_delete(
         self,
         db: Session,
         db_obj: Submission,
         *,
-        deleter_uuid: str | None = None,
+        deleter_uuid: UUID | None = None,
         deleter_role: str | None = None,
     ) -> Submission:
         obj_in = {
@@ -178,6 +224,32 @@ class CRUDSubmission(CRUDBase[Submission]):
 
         return super().update(db, db_obj=db_obj, obj_in=obj_in)
 
+    # =================================================
+    # ⭐ 被報名者視角（participations）
+    # =================================================
+    def list_participations_by_user(
+        self,
+        db: Session,
+        *,
+        user_uuid: UUID,
+    ) -> list[Submission]:
+        """
+        /users/me/participations
+        - 僅限「實際參與者」
+        - 必須已註冊為 User
+        """
+        return (
+            db.query(self.model)
+            .options(
+                selectinload(self.model.event),
+            )
+            .filter(
+                self.model.is_deleted == False,
+                self.model.user_uuid == user_uuid,
+            )
+            .order_by(self.model.submitted_at.desc())
+            .all()
+        )
 
 
 submission_crud = CRUDSubmission(Submission)
