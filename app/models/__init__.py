@@ -29,6 +29,7 @@ from .event.event_rule import EventRule
 from .event.event_schedule import EventSchedule
 from .event.event_staff import EventStaff
 from .event.event_ticket import EventTicket
+from .event.event_category import EventCategory
 
 # File
 from .file.file import File

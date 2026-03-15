@@ -10,6 +10,8 @@ from app.core.config import settings
 # ---------------------------------------------------------
 DATABASE_URL = settings.db_url
 
+print("DATABASE_URL =", DATABASE_URL)
+
 if not DATABASE_URL:
     raise RuntimeError("❌ DATABASE_URL is missing! Check your .env file.")
 

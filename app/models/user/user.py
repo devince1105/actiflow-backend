@@ -16,12 +16,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 from app.models.base.base_model import BaseModel
+from app.models.submission.submission import Submission
 # ---------------------------------------------------------
 if TYPE_CHECKING:
     from app.models.user.user_profile import UserProfile
     from app.models.membership.system_membership import SystemMembership
     from app.models.membership.organizer_membership import OrganizerMembership
-    from app.models.submission.submission import Submission
     from app.models.auth.refresh_token import RefreshToken
     from app.models.auth.email_verification import EmailVerification
     from app.models.auth.password_reset import PasswordReset
@@ -57,6 +57,23 @@ class User(BaseModel, Base):
     # ---------------------------------------------------------
     # Email verification STATE（最終狀態）
     # ---------------------------------------------------------
+    auth_provider: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        default="local",
+        server_default="local",
+        comment="登入方式 (local, google, etc)",
+    )
+
+    from sqlalchemy.dialects.postgresql import JSONB
+    config: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Users config",
+    )
+
     is_email_verified: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
@@ -102,6 +119,8 @@ class User(BaseModel, Base):
     )
 
     submissions: Mapped[List["Submission"]] = relationship(
+        "Submission",
+        foreign_keys=lambda: [Submission.user_uuid],
         back_populates="user",
         lazy="selectin",
     )

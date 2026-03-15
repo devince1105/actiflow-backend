@@ -1,24 +1,25 @@
-# app/schemas/event/core/organizer/organizer_event_base.py
+# app/schemas/event/organizer/event_create.py
 
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
-from uuid import UUID
 from datetime import datetime
+from uuid import UUID
 
 
-class OrganizerEventBase(BaseModel):
+class OrganizerEventCreate(BaseModel):
     """
-    Organizer 後台 Event 核心欄位（Create / Update 共用）
+    Organizer 後台建立 Event 用 Schema
 
     ❌ 不包含：
-    - organizer_uuid（由後端 membership 注入）
+    - organizer_uuid（由 path / membership 注入）
     - event_code（由後端產生）
     - audit 欄位
 
-    ✅ 僅包含 organizer 可管理的 domain 欄位
+    ✅ 僅包含 Organizer 可輸入的 domain 欄位
     """
 
-    activity_template_uuid: UUID
+    # 若你之後完全移除 ActivityTemplate，可直接刪掉這個欄位
+    #activity_template_uuid: Optional[UUID] = None
 
     name: str
     description: Optional[str] = None
@@ -27,9 +28,10 @@ class OrganizerEventBase(BaseModel):
     end_date: Optional[datetime] = None
     registration_deadline: Optional[datetime] = None
 
-    # 注意：實際狀態轉換需經過 guard
+    # draft / published / closed
     status: str = "draft"
 
+    # 自由 JSON（前端 Form 定義、顯示設定等）
     config: Optional[Dict[str, Any]] = None
 
     model_config = {

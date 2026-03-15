@@ -36,13 +36,15 @@ def require_super_admin(
 
     return user
 
+
 # ============================================================
-# Legacy organizer guard
+# Legacy organizer guard (TOKEN-BASED)
 # ============================================================
-# ⚠️ 僅適用於「token-based organizer context」的舊 API
-# 例如：
-#   /organizers/{organizer_uuid}/*
-# token 內需已包含 organizer membership
+# 適用於：
+#   /organizer/events/*
+#   /organizer/events/{event_uuid}
+#
+# organizer context 來自 token / identity
 # ------------------------------------------------------------
 
 def require_organizer_admin(
@@ -51,11 +53,8 @@ def require_organizer_admin(
     """
     Legacy Organizer Admin guard
 
-    使用時機：
-    - 舊 organizer API
-    - organizer context 已存在於 identity.token
-
-    ⚠️ 不適用於 Canonical API（path-based organizer）
+    ⚠️ organizer context 來自 token
+    ⚠️ 不吃 organizer_uuid path / query
     """
 
     membership = getattr(user, "membership", None)
@@ -76,17 +75,17 @@ def require_organizer_admin(
 
 
 # ============================================================
-# Canonical organizer context resolver
+# Canonical organizer context resolver (PATH-BASED)
 # ============================================================
 # 適用於：
-#   /organizer/{organizer_uuid}/events/{event_uuid}/*
-#   /events/organizer/*
+#   /organizers/{organizer_uuid}/events/*
+#   /organizers/{organizer_uuid}/events/{event_uuid}/*
 # ------------------------------------------------------------
 
 def resolve_current_organizer_context(
     organizer_uuid: UUID,
     db: Session = Depends(get_db),
-    identity=Depends(get_current_user),  # ← 明確語意
+    identity=Depends(get_current_user),
 ):
     """
     Resolve organizer membership from DB (canonical)
@@ -95,6 +94,7 @@ def resolve_current_organizer_context(
     - 不信任 token 內的 organizer 資訊
     - 以 path organizer_uuid + DB membership 為準
     """
+
     user_uuid = identity["uuid"]
 
     membership = (
@@ -137,8 +137,8 @@ def require_current_organizer_admin(
     Organizer admin / owner
 
     使用於：
+    - canonical organizer APIs
     - approve submission
-    - organizer admin operations
     """
 
     if membership.role not in ["owner", "admin"]:
@@ -149,11 +149,11 @@ def require_current_organizer_admin(
 
     return membership
 
+
 # ============================================================
-# Compatibility identity helpers (legacy imports)
+# Compatibility identity helpers (legacy)
 # ============================================================
 
-from app.api.auth.dependencies import get_current_user
 from app.api.auth.identity import build_identity
 
 def get_current_identity(
@@ -167,10 +167,16 @@ def get_current_identity(
     """
     return build_identity(db, user)
 
-# ============================================================
-# Compatibility aliases (legacy imports)
-# ============================================================
-# ⚠️ 讓舊 API 不炸，實際邏輯已是 canonical
 
+# ============================================================
+# Explicit aliases (IMPORTANT)
+# ============================================================
+# 為了避免 router 誤用 guard，明確命名
+# ------------------------------------------------------------
+
+# 🔹 Legacy（token-based，不吃 organizer_uuid）
+require_organizer_admin_legacy = require_organizer_admin
+
+# 🔹 Canonical（path-based，一定吃 organizer_uuid）
 require_organizer_member = require_current_organizer_member
 require_organizer_admin = require_current_organizer_admin

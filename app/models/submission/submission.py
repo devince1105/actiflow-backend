@@ -1,17 +1,13 @@
 # app/models/submission/submission.py
 
-# ---------------------------------------------------------
-# Standard Model Header (SQLAlchemy 2.0)
-# ---------------------------------------------------------
-from typing import List, Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 from datetime import datetime, timezone
 from uuid import UUID as PyUUID
 
+import sqlalchemy as sa
 from sqlalchemy import (
-    Boolean,
     DateTime,
     ForeignKey,
-    Integer,
     String,
     Text,
 )
@@ -19,25 +15,33 @@ from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-import sqlalchemy as sa
-
 from app.core.db import Base
 from app.models.base.base_model import BaseModel
 from app.models.submission.enums import SubmissionStatus
-# ---------------------------------------------------------
+
 if TYPE_CHECKING:
     from app.models.event.event import Event
     from app.models.user.user import User
     from app.models.submission.submission_value import SubmissionValue
     from app.models.event.event_ticket import EventTicket
     from app.models.submission.submission_file import SubmissionFile
-# ---------------------------------------------------------
+
 
 class Submission(BaseModel, Base):
     """
     報名紀錄模型
     """
     __tablename__ = "submissions"
+
+    # =========================================================
+    # Computed / Alias Properties
+    # =========================================================
+    @property
+    def participant_email(self) -> str:
+        """
+        實際參與者 email（Schema / API 使用）
+        """
+        return self.user_email
 
     __table_args__ = (
         sa.UniqueConstraint(
@@ -47,18 +51,18 @@ class Submission(BaseModel, Base):
         ),
     )
 
-    # ---------------------------------------------------------
+    # =========================================================
     # Business identifiers
-    # ---------------------------------------------------------
+    # =========================================================
     submission_code: Mapped[str] = mapped_column(
         String,
-        index=True,
         nullable=False,
+        index=True,
     )
 
-    # ---------------------------------------------------------
-    # Event reference
-    # ---------------------------------------------------------
+    # =========================================================
+    # Event
+    # =========================================================
     event_uuid: Mapped[PyUUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("events.uuid", ondelete="CASCADE"),
@@ -72,9 +76,9 @@ class Submission(BaseModel, Base):
         lazy="selectin",
     )
 
-    # ---------------------------------------------------------
-    # Applicant info
-    # ---------------------------------------------------------
+    # =========================================================
+    # Participant（實際參加者）
+    # =========================================================
     user_email: Mapped[str] = mapped_column(
         String,
         nullable=False,
@@ -90,14 +94,37 @@ class Submission(BaseModel, Base):
 
     user: Mapped[Optional["User"]] = relationship(
         "User",
+        foreign_keys=[user_uuid],
         back_populates="submissions",
         lazy="selectin",
     )
 
-    # ---------------------------------------------------------
+    # =========================================================
+    # Submitter（填表者 / 操作者）
+    # =========================================================
+    submitted_by_uuid: Mapped[Optional[PyUUID]] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.uuid", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    submitted_by_email: Mapped[Optional[str]] = mapped_column(
+        String,
+        nullable=True,
+        index=True,
+    )
+
+    submitted_by: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[submitted_by_uuid],
+        lazy="selectin",
+    )
+
+    # =========================================================
     # Status
-    # ---------------------------------------------------------
-    status:Mapped[SubmissionStatus] = mapped_column(
+    # =========================================================
+    status: Mapped[SubmissionStatus] = mapped_column(
         SAEnum(SubmissionStatus, name="submission_status"),
         default=SubmissionStatus.pending,
         nullable=False,
@@ -108,26 +135,13 @@ class Submission(BaseModel, Base):
         nullable=True,
     )
 
-    # ---------------------------------------------------------
-    # Internal notes
-    # ---------------------------------------------------------
-    notes: Mapped[Optional[str]] = mapped_column(
-        Text,
-        nullable=True,
-    )
+    # =========================================================
+    # Metadata
+    # =========================================================
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    # ---------------------------------------------------------
-    # Security / audit info
-    # ---------------------------------------------------------
-    ip_address: Mapped[Optional[str]] = mapped_column(
-        String,
-        nullable=True,
-    )
-
-    user_agent: Mapped[Optional[str]] = mapped_column(
-        Text,
-        nullable=True,
-    )
+    ip_address: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    user_agent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     submitted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -135,20 +149,15 @@ class Submission(BaseModel, Base):
         nullable=False,
     )
 
-    # ---------------------------------------------------------
-    # Extra data
-    # ---------------------------------------------------------
     extra_data: Mapped[dict] = mapped_column(
         JSONB,
         default=dict,
         server_default="{}",
     )
 
-    # ---------------------------------------------------------
+    # =========================================================
     # Relationships
-    # ---------------------------------------------------------
-
-
+    # =========================================================
     values: Mapped[list["SubmissionValue"]] = relationship(
         "SubmissionValue",
         back_populates="submission",

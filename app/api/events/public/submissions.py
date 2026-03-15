@@ -32,6 +32,7 @@ from app.models.event.event_field import EventField
 from app.models.submission.submission import Submission
 from app.models.submission.submission_value import SubmissionValue
 from app.models.auth.email_verification import EmailVerification
+from app.models.user.user import User
 
 from app.schemas.submission.submission_public import (
     SubmissionPublicCreate,
@@ -169,22 +170,52 @@ def create_submission(
         )
 
     # --------------------------------------------------------
-    # 2. 嘗試取得登入使用者（可選）
+    # 2. 嘗試取得登入者（填表者）
     # --------------------------------------------------------
-    user_uuid = None
+    submitted_by_uuid = None
+    submitted_by_email = None
+
     token = request.cookies.get("access_token")
     if token:
         payload = decode_access_token(token)
         user_uuid = payload.get("sub") if payload else None
 
+        if user_uuid:
+            user = (
+                db.query(User)
+                .filter(
+                    User.uuid == user_uuid,
+                    User.is_deleted == False,
+                )
+                .first()
+            )
+            if user:
+                submitted_by_uuid = user.uuid
+                submitted_by_email = user.email
+
     # --------------------------------------------------------
-    # 3. 建立 Submission（主檔）
+    # 3. 判斷「參加者是否就是本人」
+    # --------------------------------------------------------
+    participant_user_uuid = None
+    if submitted_by_email and submitted_by_email == data.user_email:
+        # 本人登入自己報名
+        participant_user_uuid = submitted_by_uuid
+
+    # --------------------------------------------------------
+    # 4. 建立 Submission（主檔）
     # --------------------------------------------------------
     submission = Submission(
         submission_code=generate_submission_code(event.event_code),
         event_uuid=event_uuid,
-        user_uuid=user_uuid,
+
+        # 參加者
+        user_uuid=participant_user_uuid,
         user_email=data.user_email,
+
+        # 填表者
+        submitted_by_uuid=submitted_by_uuid,
+        submitted_by_email=submitted_by_email,
+
         status="pending",
         notes=data.notes,
         extra_data=data.extra_data,
@@ -196,7 +227,7 @@ def create_submission(
     db.flush()  # 取得 submission.uuid
 
     # --------------------------------------------------------
-    # 4. 準備 field_key → EventField 映射
+    # 5. 準備 field_key → EventField 映射
     # --------------------------------------------------------
     fields = (
         db.query(EventField)
@@ -211,17 +242,15 @@ def create_submission(
     field_map = {f.field_key: f for f in fields}
 
     # --------------------------------------------------------
-    # 5. 建立 SubmissionValue（子表）
+    # 6. 建立 SubmissionValue（子表）
     # --------------------------------------------------------
     values: list[SubmissionValue] = []
 
     for v in data.values:
         field = field_map.get(v.field_key)
         if not field:
-            raise ActiFlowBusinessException(
-                message=f"Invalid field_key: {v.field_key}",
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            # Skip invalid fields for MVP instead of failing the entire registration
+            continue
 
         values.append(
             SubmissionValue(
@@ -266,6 +295,8 @@ def create_submission(
     )
 
     return submission
+
+
 
 
 # ============================================================

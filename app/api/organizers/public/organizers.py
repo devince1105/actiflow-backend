@@ -1,4 +1,4 @@
-# app/api/organizers/organizers.py  # organizer 自己的 CRUD
+# app/api/organizers/public/organizers.py  # organizer 自己的 CRUD
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session

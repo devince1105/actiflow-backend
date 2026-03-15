@@ -21,6 +21,4 @@ class PaginatedResponse(BaseModel, Generic[T]):
     page_size: int
     items: List[T]
 
-    model_config = {"from_attributes": True}
-
     

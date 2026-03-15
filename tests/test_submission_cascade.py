@@ -58,6 +58,7 @@ def test_submission_cascade_delete(db: Session):
         uuid=uuid4(),
         event_code=f"EVT-{uuid4().hex[:8]}",
         name="Cascade Test Event",
+        slug=f"cascade-test-event-{uuid4().hex[:6]}",
         status="published",
         organizer_uuid=organizer.uuid,  # ⭐ 關鍵
         
@@ -65,6 +66,7 @@ def test_submission_cascade_delete(db: Session):
         start_date=now,
         end_date=now + timedelta(days=1),
         registration_deadline=now + timedelta(hours=12),
+        version=1,
     )
     db.add(event)
     db.flush()
@@ -77,6 +79,9 @@ def test_submission_cascade_delete(db: Session):
         submission_code="TEST-SUB-001",
         event_uuid=event.uuid,
         user_email="test@example.com",
+        status="pending",
+        extra_data={},
+        version=1,
     )
     db.add(submission)
     db.flush()
@@ -90,6 +95,7 @@ def test_submission_cascade_delete(db: Session):
         field_key="test_field",
         label="Test Field",
         field_type="text",
+        version=1,
     )
     db.add(field)
     db.flush()
@@ -100,6 +106,7 @@ def test_submission_cascade_delete(db: Session):
         event_field_uuid=field.uuid,
         field_key=field.field_key,  # ✅ 補這
         value="test value",
+        version=1,
     )
     db.add(value)
     db.flush()

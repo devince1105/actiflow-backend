@@ -1,4 +1,4 @@
-# app/schemas/organizer/organizer_public.py
+# app/schemas/organizer/public/organizer_public.py
 
 from pydantic import BaseModel, HttpUrl
 from typing import Optional

@@ -156,7 +156,7 @@ def list_public_events(
             organizer_info = OrganizerPublic(
                 uuid=event.organizer.uuid,
                 name=event.organizer.name,
-                slug=event.organizer.slug,
+                slug=getattr(event.organizer, "slug", None),
                 logo_url=event.organizer.logo_url
             )
 

@@ -22,7 +22,7 @@ import logging
 from app.exceptions.base import ActiFlowBusinessException
 
 router = APIRouter(
-    prefix="/organizer/{organizer_uuid}/events/{event_uuid}/submissions",
+    prefix="/organizers/{organizer_uuid}/events/{event_uuid}/submissions",
     tags=["Organizer - Submissions"],
 )
 logger = logging.getLogger("submission.commands")
