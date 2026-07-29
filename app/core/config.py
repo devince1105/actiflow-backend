@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     R2_ENDPOINT_URL: str = ""
     R2_PUBLIC_BASE_URL: str = ""
 
+    # === Local test administrator (never expose through APIs) ===
+    SUPER_ADMIN_EMAIL: str = ""
+    SUPER_ADMIN_PASSWORD: str = ""
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     def split_cors(cls, v):
         if isinstance(v, str):

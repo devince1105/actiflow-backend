@@ -23,9 +23,11 @@ def require_super_admin(
     TODO: remove after legacy APIs migrated.
     """
 
+    memberships = user.get("memberships", []) if isinstance(user, dict) else []
     system_roles = [
-        m for m in user.memberships
-        if m.get("type") == "system"
+        membership
+        for membership in memberships
+        if membership.get("type") == "system"
     ]
 
     if not any(m["role"] == "super_admin" for m in system_roles):
