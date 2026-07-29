@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     RESEND_FROM_EMAIL: str = ""
     FRONTEND_BASE_URL: str = ""
 
+    # === Cloudflare R2 ===
+    R2_ACCOUNT_ID: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_BUCKET_NAME: str = ""
+    R2_ENDPOINT_URL: str = ""
+    R2_PUBLIC_BASE_URL: str = ""
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     def split_cors(cls, v):
         if isinstance(v, str):

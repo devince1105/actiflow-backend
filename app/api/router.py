@@ -34,6 +34,7 @@ from app.api.events.public.submissions import router as public_submissions_route
 from app.api.users.me.me import router as users_me_router
 from app.api.users.me.submissions import router as users_me_submissions_router
 from app.api.users.me.participations import router as users_me_participations_router
+from app.api.uploads.images import router as image_uploads_router
 
 # =======================
 # Organizers (Public)
@@ -184,6 +185,7 @@ api_router.include_router(
     users_me_participations_router,
     tags=["Users - Me - Participations"],
 )
+api_router.include_router(image_uploads_router)
 
 # ------------------------------------------------------------
 # Organizer scope
