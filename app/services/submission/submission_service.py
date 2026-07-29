@@ -30,7 +30,15 @@ class SubmissionService:
     def can_register(event: Event, user_email: str = None) -> bool:
         if event.status != "published": return False
         if event.current_attendance >= event.max_capacity: return False
-        if event.registration_deadline and datetime.now(timezone.utc) > event.registration_deadline: return False
+        if event.registration_deadline:
+            deadline = event.registration_deadline
+            now = (
+                datetime.now(timezone.utc)
+                if deadline.tzinfo is not None
+                else datetime.now()
+            )
+            if now > deadline:
+                return False
         return True
 
     @staticmethod

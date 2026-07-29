@@ -1,4 +1,6 @@
 from uuid import uuid4
+from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -45,3 +47,14 @@ def test_cancel_releases_capacity():
 
 def test_rejected_submission_can_be_reopened():
     assert_status_transition(current="rejected", target="pending")
+
+
+def test_naive_registration_deadline_does_not_raise_type_error():
+    event = SimpleNamespace(
+        status="published",
+        current_attendance=0,
+        max_capacity=10,
+        registration_deadline=datetime.now() - timedelta(minutes=1),
+    )
+
+    assert SubmissionService.can_register(event) is False
