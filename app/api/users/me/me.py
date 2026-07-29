@@ -22,6 +22,7 @@ from app.schemas.user.account_settings import (
     NotificationSettingsUpdate,
     PasswordChangeRequest,
 )
+from app.core.roles import ACTIVE_ORGANIZER_ROLES
 
 router = APIRouter(
     prefix="/users/me",
@@ -88,7 +89,11 @@ def get_current_user(
         .filter(
             OrganizerMembership.user_uuid == current_user.uuid,
             OrganizerMembership.is_deleted == False,
+            OrganizerMembership.is_active == True,
+            OrganizerMembership.is_suspended == False,
+            OrganizerMembership.role.in_(ACTIVE_ORGANIZER_ROLES),
             Organizer.is_deleted == False,
+            Organizer.is_active == True,
         )
         .all()
     )
