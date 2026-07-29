@@ -45,7 +45,14 @@ class Settings(BaseSettings):
     
     @property
     def db_url(self) -> str:
-        if self.ENV in ("dev", "test"):
+        if self.ENV == "test":
+            if not self.TEST_DATABASE_URL:
+                raise RuntimeError(
+                    "TEST_DATABASE_URL is required when ENV=test. "
+                    "Tests must never fall back to DATABASE_URL."
+                )
+            return self.TEST_DATABASE_URL
+        if self.ENV == "dev":
             return self.TEST_DATABASE_URL or self.DATABASE_URL
         return self.DATABASE_URL
 
