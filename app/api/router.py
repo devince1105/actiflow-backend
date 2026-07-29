@@ -104,6 +104,7 @@ from app.api.admin.dashboard import router as admin_dashboard_router
 from app.api.admin.users_v2 import router as admin_users_router
 from app.api.admin.organizers_v2 import router as admin_organizers_v2_router
 from app.api.admin.events_v2 import router as admin_events_router
+from app.api.admin.submissions import router as admin_submissions_router
 
 # ============================================================
 # Root API Router
@@ -254,6 +255,7 @@ api_router.include_router(admin_dashboard_router)
 api_router.include_router(admin_users_router)
 api_router.include_router(admin_organizers_v2_router)
 api_router.include_router(admin_events_router)
+api_router.include_router(admin_submissions_router)
 
 api_router.include_router(
     admin_organizers_router,
