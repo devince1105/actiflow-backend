@@ -6,8 +6,9 @@ from uuid import UUID
 from starlette import status
 
 from app.core.db import get_db
-from app.api.auth.dependencies import get_current_user
+from app.api.auth.dependencies import get_current_user, get_current_user_uuid
 from app.models.membership.organizer_membership import OrganizerMembership
+from app.models.user.user import User
 from app.core.roles import (
     ACTIVE_ORGANIZER_ROLES,
     ORGANIZER_MANAGEMENT_ROLES,
@@ -93,7 +94,7 @@ def require_organizer_admin(
 def resolve_current_organizer_context(
     organizer_uuid: UUID,
     db: Session = Depends(get_db),
-    identity=Depends(get_current_user),
+    user_uuid: str = Depends(get_current_user_uuid),
 ):
     """
     Resolve organizer membership from DB (canonical)
@@ -103,10 +104,9 @@ def resolve_current_organizer_context(
     - 以 path organizer_uuid + DB membership 為準
     """
 
-    user_uuid = identity["uuid"]
-
     membership = (
         db.query(OrganizerMembership)
+        .join(User, User.uuid == OrganizerMembership.user_uuid)
         .filter(
             OrganizerMembership.user_uuid == user_uuid,
             OrganizerMembership.organizer_uuid == organizer_uuid,
@@ -114,6 +114,8 @@ def resolve_current_organizer_context(
             OrganizerMembership.is_deleted == False,
             OrganizerMembership.is_suspended == False,
             OrganizerMembership.role.in_(ACTIVE_ORGANIZER_ROLES),
+            User.is_active == True,
+            User.is_deleted == False,
         )
         .first()
     )

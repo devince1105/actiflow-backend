@@ -105,6 +105,9 @@ class _RecordingQuery:
         self.filters.extend(conditions)
         return self
 
+    def join(self, *_args):
+        return self
+
     def first(self):
         return self.result
 
@@ -125,7 +128,7 @@ def test_organizer_context_scopes_membership_to_active_path_organizer():
     result = resolve_current_organizer_context(
         organizer_uuid=organizer_uuid,
         db=db,
-        identity={"uuid": uuid4()},
+        user_uuid=str(uuid4()),
     )
 
     assert result is membership
@@ -145,7 +148,7 @@ def test_organizer_context_rejects_missing_or_ineligible_membership():
         resolve_current_organizer_context(
             organizer_uuid=uuid4(),
             db=db,
-            identity={"uuid": uuid4()},
+            user_uuid=str(uuid4()),
         )
 
     assert exc_info.value.status_code == 403

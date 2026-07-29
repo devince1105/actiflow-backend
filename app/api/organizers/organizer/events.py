@@ -16,9 +16,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from uuid import UUID
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -61,6 +62,11 @@ router = APIRouter(
 @router.get("", response_model=PaginatedResponse[OrganizerEventResponse])
 def list_events(
     organizer_uuid: UUID,
+    event_scope: Literal["upcoming", "history"] = Query(
+        "upcoming",
+        alias="scope",
+        description="upcoming or history",
+    ),
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     db: Session = Depends(get_db),
@@ -78,17 +84,46 @@ def list_events(
         )
     )
 
-    # ---- total count (no order_by for performance) ----
-    total = base_query.count()
+    now = datetime.utcnow()
+    if event_scope == "history":
+        base_query = base_query.filter(
+            or_(
+                Event.status == EventStatus.CLOSED,
+                Event.end_date < now,
+            )
+        )
+        ordering = (
+            Event.end_date.desc().nullslast(),
+            Event.start_date.desc(),
+        )
+    else:
+        base_query = base_query.filter(
+            and_(
+                Event.status != EventStatus.CLOSED,
+                or_(
+                    Event.end_date.is_(None),
+                    Event.end_date >= now,
+                ),
+            )
+        )
+        ordering = (
+            Event.start_date.asc(),
+            Event.created_at.desc(),
+        )
 
-    # ---- paginated result ----
-    events = (
+    # Fetch the page and total in one database round-trip. This matters for
+    # remote Neon connections where a separate COUNT query adds noticeable
+    # latency even when the page contains only a few events.
+    rows = (
         base_query
-        .order_by(Event.created_at.desc())
+        .add_columns(func.count(Event.uuid).over().label("total_count"))
+        .order_by(*ordering)
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
     )
+    events = [event for event, _total_count in rows]
+    total = int(rows[0].total_count) if rows else 0
 
     return PaginatedResponse(
         items=[OrganizerEventResponse.model_validate(e) for e in events],
