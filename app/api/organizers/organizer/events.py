@@ -22,7 +22,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.core.dependencies import require_current_organizer_admin
+from app.core.dependencies import (
+    require_current_organizer_admin,
+    require_current_organizer_member,
+)
 
 from app.core.constants.event_status import EventStatus
 from app.core.domain.event_status_guard import assert_event_status_transition
@@ -61,7 +64,7 @@ def list_events(
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     db: Session = Depends(get_db),
-    membership=Depends(require_current_organizer_admin),
+    membership=Depends(require_current_organizer_member),
 ):
     if membership.organizer_uuid != organizer_uuid:
         raise HTTPException(status_code=403, detail="Organizer mismatch")
@@ -103,7 +106,7 @@ def get_event_detail(
     organizer_uuid: UUID,
     event_uuid: UUID,
     db: Session = Depends(get_db),
-    membership=Depends(require_current_organizer_admin),
+    membership=Depends(require_current_organizer_member),
 ):
     if membership.organizer_uuid != organizer_uuid:
         raise HTTPException(status_code=403, detail="Organizer mismatch")

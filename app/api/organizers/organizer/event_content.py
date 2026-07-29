@@ -5,6 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
+from app.core.dependencies import (
+    require_current_organizer_admin,
+    require_current_organizer_member,
+)
+from app.models.event.event import Event
 from app.schemas.event.public.event_content import EventContentSchema
 from app.crud.event.crud_event_content import (
     get_event_content as get_event_content_crud,
@@ -15,14 +20,32 @@ from app.crud.event.crud_event_content import (
 
 router = APIRouter()
 
+
+def _require_owned_event(db: Session, event_uuid: UUID, organizer_uuid: UUID) -> None:
+    exists = (
+        db.query(Event.uuid)
+        .filter(
+            Event.uuid == event_uuid,
+            Event.organizer_uuid == organizer_uuid,
+            Event.is_deleted == False,
+        )
+        .first()
+    )
+    if not exists:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+
 @router.get(
     "/events/{event_uuid}/content",
     response_model=EventContentSchema,
 )
 def get_event_content(
+    organizer_uuid: UUID,
     event_uuid: UUID,
     db: Session = Depends(get_db),
+    membership=Depends(require_current_organizer_member),
 ):
+    _require_owned_event(db, event_uuid, organizer_uuid)
     return get_event_content_crud(
         db,
         event_uuid=event_uuid,
@@ -34,10 +57,13 @@ def get_event_content(
     response_model=EventContentSchema,
 )
 def replace_event_content(
+    organizer_uuid: UUID,
     event_uuid: UUID,
     payload: EventContentSchema,
     db: Session = Depends(get_db),
+    membership=Depends(require_current_organizer_admin),
 ):
+    _require_owned_event(db, event_uuid, organizer_uuid)
     try:
         return replace_event_content_crud(
             db,
@@ -53,10 +79,13 @@ def replace_event_content(
     response_model=EventContentSchema,
 )   
 def patch_event_content(
+    organizer_uuid: UUID,
     event_uuid: UUID,
     payload: EventContentSchema,
     db: Session = Depends(get_db),
+    membership=Depends(require_current_organizer_admin),
 ):
+    _require_owned_event(db, event_uuid, organizer_uuid)
     try:
         return patch_event_content_crud(
             db,
@@ -72,9 +101,12 @@ def patch_event_content(
     response_model=EventContentSchema,
 )   
 def delete_event_content(
+    organizer_uuid: UUID,
     event_uuid: UUID,
     db: Session = Depends(get_db),
+    membership=Depends(require_current_organizer_admin),
 ):
+    _require_owned_event(db, event_uuid, organizer_uuid)
     try:
         return delete_event_content_crud(
             db,

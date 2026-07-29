@@ -7,7 +7,7 @@ from sqlalchemy import func
 from uuid import UUID
 
 from app.core.db import get_db
-from app.core.rbac import require_organizer_role
+from app.core.dependencies import require_current_organizer_member
 
 from app.schemas.organizer.dashboard import (
     OrganizerDashboardResponse,
@@ -27,11 +27,11 @@ router = APIRouter(
 @router.get(
     "",
     response_model=OrganizerDashboardResponse,
-    dependencies=[Depends(require_organizer_role(["owner", "admin"]))],
 )
 def get_dashboard(
     organizer_uuid: UUID,
     db: Session = Depends(get_db),
+    membership=Depends(require_current_organizer_member),
 ):
     """
     Organizer 後台 Dashboard（UX 用）
