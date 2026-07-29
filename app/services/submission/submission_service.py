@@ -24,6 +24,8 @@ from app.core.config import settings
 logger = logging.getLogger("actiflow.submission")
 
 class SubmissionService:
+    CAPACITY_STATUSES = {"pending", "email_verified", "paid", "completed"}
+
     @staticmethod
     def can_register(event: Event, user_email: str = None) -> bool:
         if event.status != "published": return False
@@ -116,6 +118,45 @@ class SubmissionService:
             raise ActiFlowBusinessException(code=ActiFlowErrorCode.UNAUTHORIZED, message=f"Role '{actor_role}' not allowed for status '{target_status}'")
 
     @staticmethod
+    def _adjust_capacity_for_transition(
+        db: Session,
+        event_uuid: UUID,
+        old_status: str,
+        target_status: str,
+    ) -> None:
+        occupied_before = old_status in SubmissionService.CAPACITY_STATUSES
+        occupied_after = target_status in SubmissionService.CAPACITY_STATUSES
+        if occupied_before == occupied_after:
+            return
+
+        if occupied_after:
+            result = db.execute(
+                update(Event)
+                .where(
+                    Event.uuid == event_uuid,
+                    Event.status == "published",
+                    Event.current_attendance < Event.max_capacity,
+                )
+                .values(current_attendance=Event.current_attendance + 1)
+            )
+            if result.rowcount == 0:
+                raise ActiFlowBusinessException(
+                    code=ActiFlowErrorCode.EVENT_FULL,
+                    message="Event became full",
+                    status_code=409,
+                )
+            return
+
+        db.execute(
+            update(Event)
+            .where(
+                Event.uuid == event_uuid,
+                Event.current_attendance > 0,
+            )
+            .values(current_attendance=Event.current_attendance - 1)
+        )
+
+    @staticmethod
     def update_status(db: Session, submission_uuid: UUID, target_status: str, actor_id: UUID = None, actor_role: str = "", reason: str = None) -> Submission:
         submission = db.query(Submission).filter(Submission.uuid == submission_uuid).first()
         if not submission: raise ActiFlowBusinessException(code=ActiFlowErrorCode.EVENT_NOT_FOUND, message="Not found", status_code=404)
@@ -126,8 +167,18 @@ class SubmissionService:
         if old_status == target_status: return submission
 
         from app.crud.submission.crud_submission_status import assert_status_transition
-        assert_status_transition(current=old_status, target=target_status)
+        try:
+            assert_status_transition(current=old_status, target=target_status)
+        except Exception as exc:
+            raise ActiFlowBusinessException(
+                code=ActiFlowErrorCode.INVALID_STATUS_TRANSITION,
+                message=str(exc),
+                status_code=409,
+            ) from exc
 
+        SubmissionService._adjust_capacity_for_transition(
+            db, submission.event_uuid, old_status, target_status
+        )
         submission.status = target_status
         if reason: submission.status_reason = reason
         submission.updated_at = datetime.now(timezone.utc)
@@ -162,6 +213,9 @@ class SubmissionService:
                     continue
 
                 assert_status_transition(current=old_status, target=target_status)
+                SubmissionService._adjust_capacity_for_transition(
+                    db, s.event_uuid, old_status, target_status
+                )
                 s.status = target_status
                 if reason: s.status_reason = reason
 
