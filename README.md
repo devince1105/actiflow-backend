@@ -245,6 +245,28 @@ R2_PUBLIC_BASE_URL=https://<public-id>.r2.dev
 - 生產環境應使用 `COOKIE_SECURE=true` 與明確的 CORS 網域。
 - `SUPER_ADMIN_EMAIL`、`SUPER_ADMIN_PASSWORD` 僅供本機測試帳密管理，不是應用程式啟動必要設定。
 
+### 測試角色帳號
+
+測試密碼只存於本機 `.env`，不得寫入 README 或提交 Git。
+
+| 測試身分 | 登入帳號 | 內部角色 | 密碼來源 |
+| --- | --- | --- | --- |
+| 網站系統管理員 | `admin@actiflow.dev` | `super_admin` | `SUPER_ADMIN_PASSWORD` |
+| 活動單位擁有者 | `qa.owner@actiflow.dev` | `owner` | `ROLE_TEST_PASSWORD` |
+| 活動單位管理員 | `qa.admin@actiflow.dev` | `admin` | `ROLE_TEST_PASSWORD` |
+| 活動單位會員 | `qa.member@actiflow.dev` | `member` | `ROLE_TEST_PASSWORD` |
+| 網站會員 | `qa.user@actiflow.dev` | 無特殊 membership | `ROLE_TEST_PASSWORD` |
+| 訪客 | 不登入 | 無 | 不需要密碼 |
+
+首次建立或需要重設 QA 帳密時執行：
+
+```bash
+./venv/bin/python -m scripts.seed_role_test_accounts
+```
+
+此腳本可重複執行，會使用 `.env` 中的 `ROLE_TEST_*` 設定更新測試帳號，
+並將 owner、admin、member 放在同一個 `ROLE_TEST_ORGANIZER_UUID` 內，方便比較權限。
+
 ### 3. 啟動 API
 
 ```bash

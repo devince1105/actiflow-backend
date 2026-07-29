@@ -43,6 +43,14 @@ class Settings(BaseSettings):
     SUPER_ADMIN_EMAIL: str = ""
     SUPER_ADMIN_PASSWORD: str = ""
 
+    # === Local QA role accounts (never expose through APIs) ===
+    ROLE_TEST_PASSWORD: str = ""
+    ROLE_TEST_ORGANIZER_UUID: str = ""
+    ROLE_TEST_OWNER_EMAIL: str = ""
+    ROLE_TEST_ADMIN_EMAIL: str = ""
+    ROLE_TEST_MEMBER_EMAIL: str = ""
+    ROLE_TEST_USER_EMAIL: str = ""
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     def split_cors(cls, v):
         if isinstance(v, str):
