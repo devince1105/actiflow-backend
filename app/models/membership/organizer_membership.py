@@ -21,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 from app.models.base.base_model import BaseModel
+from app.core.roles import ACTIVE_ORGANIZER_ROLES
 # ---------------------------------------------------------
 if TYPE_CHECKING:
     from app.models.user.user import User
@@ -28,13 +29,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------
 
 
-ORGANIZER_ROLES = (
-    "owner",
-    "admin",
-    "editor",
-    "viewer",
-    "member",
-)
+ORGANIZER_ROLES = ACTIVE_ORGANIZER_ROLES
 
 
 class OrganizerMembership(BaseModel, Base):

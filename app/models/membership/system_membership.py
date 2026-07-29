@@ -21,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 from app.models.base.base_model import BaseModel
+from app.core.roles import SYSTEM_SUPER_ADMIN
 # ---------------------------------------------------------
 if TYPE_CHECKING:
     from app.models.user.user import User
@@ -28,7 +29,7 @@ if TYPE_CHECKING:
 
 
 SYSTEM_ROLES = (
-    "super_admin",
+    SYSTEM_SUPER_ADMIN,
     "system_admin",
     "site_admin",
     "support",

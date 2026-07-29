@@ -8,6 +8,12 @@ from starlette import status
 from app.core.db import get_db
 from app.api.auth.dependencies import get_current_user
 from app.models.membership.organizer_membership import OrganizerMembership
+from app.core.roles import (
+    ACTIVE_ORGANIZER_ROLES,
+    ORGANIZER_MANAGEMENT_ROLES,
+    ORGANIZER_OWNER,
+    SYSTEM_SUPER_ADMIN,
+)
 
 # ============================================================
 # Legacy super admin guard (temporary)
@@ -30,7 +36,7 @@ def require_super_admin(
         if membership.get("type") == "system"
     ]
 
-    if not any(m["role"] == "super_admin" for m in system_roles):
+    if not any(m.get("role") == SYSTEM_SUPER_ADMIN for m in system_roles):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Super admin access required",
@@ -106,6 +112,8 @@ def resolve_current_organizer_context(
             OrganizerMembership.organizer_uuid == organizer_uuid,
             OrganizerMembership.is_active == True,
             OrganizerMembership.is_deleted == False,
+            OrganizerMembership.is_suspended == False,
+            OrganizerMembership.role.in_(ACTIVE_ORGANIZER_ROLES),
         )
         .first()
     )
@@ -129,6 +137,11 @@ def require_current_organizer_member(
     """
     Organizer member or above
     """
+    if membership.role not in ACTIVE_ORGANIZER_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Organizer membership role is not supported",
+        )
     return membership
 
 
@@ -143,7 +156,7 @@ def require_current_organizer_admin(
     - approve submission
     """
 
-    if membership.role not in ["owner", "admin"]:
+    if membership.role not in ORGANIZER_MANAGEMENT_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Organizer admin access required",
@@ -152,22 +165,31 @@ def require_current_organizer_admin(
     return membership
 
 
+def require_current_organizer_owner(
+    membership=Depends(resolve_current_organizer_context),
+):
+    """Only the owner of the organizer can perform ownership-level actions."""
+    if membership.role != ORGANIZER_OWNER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Organizer owner access required",
+        )
+    return membership
+
+
 # ============================================================
 # Compatibility identity helpers (legacy)
 # ============================================================
 
-from app.api.auth.identity import build_identity
-
 def get_current_identity(
     user=Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
     """
     Legacy helper for APIs that expect identity dict
 
     ⚠️ 新 API 不應再使用
     """
-    return build_identity(db, user)
+    return user
 
 
 # ============================================================
@@ -182,3 +204,7 @@ require_organizer_admin_legacy = require_organizer_admin
 # 🔹 Canonical（path-based，一定吃 organizer_uuid）
 require_organizer_member = require_current_organizer_member
 require_organizer_admin = require_current_organizer_admin
+require_organizer_owner = require_current_organizer_owner
+
+# Compatibility name used by dormant legacy admin modules.
+get_current_super_admin = require_super_admin
