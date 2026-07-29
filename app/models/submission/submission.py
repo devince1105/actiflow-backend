@@ -49,6 +49,11 @@ class Submission(BaseModel, Base):
             "submission_code",
             name="uq_submission_event_code",
         ),
+        sa.UniqueConstraint(
+            "event_uuid",
+            "user_email",
+            name="uq_submission_event_user_email",
+        ),
     )
 
     # =========================================================

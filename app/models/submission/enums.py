@@ -9,4 +9,6 @@ class SubmissionStatus(str, enum.Enum):
     canceled = "canceled"
     completed = "completed"
     waitlist = "waitlist"
+    expired = "expired"
+    rejected = "rejected"
 

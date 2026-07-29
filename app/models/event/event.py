@@ -67,6 +67,21 @@ class Event(BaseModel, Base):
         default="draft",
         index=True,
     )
+
+    # ---------------------------------------------------------
+    # 容量與報名控制 (Atomic Control)
+    # ---------------------------------------------------------
+    max_capacity: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=100,  # MVP 預設 100
+    )
+
+    current_attendance: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
     
     # ---------------------------------------------------------
     # 外鍵：活動分類
