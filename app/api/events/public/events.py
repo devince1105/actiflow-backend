@@ -1,8 +1,11 @@
 # app/api/events/public/events.py
 # 活動列表 / 搜尋（Public）
 
+from datetime import datetime
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.db import get_db
@@ -35,13 +38,38 @@ router = APIRouter(
 def list_public_events(
     page: int = 1,
     page_size: int = 20,
+    period: Literal["upcoming", "past", "all"] = "all",
     db: Session = Depends(get_db),
 ):
     """
     公開活動列表（僅顯示已發布的活動）
     - 僅回傳列表頁需要的欄位
     - 包含報名人數統計 (registered_count)
+    - period=upcoming：尚未結束或正在進行
+    - period=past：已結束
+    - period=all：全部（保留既有 API 行為）
     """
+
+    now = datetime.now()
+    period_filter = None
+    if period == "upcoming":
+        period_filter = or_(
+            Event.end_date >= now,
+            and_(Event.end_date.is_(None), Event.start_date >= now),
+        )
+    elif period == "past":
+        period_filter = or_(
+            Event.end_date < now,
+            and_(Event.end_date.is_(None), Event.start_date < now),
+        )
+
+    event_filters = [
+        Event.status == EventStatus.PUBLISHED,
+        Event.is_deleted == False,
+        Event.is_active == True,
+    ]
+    if period_filter is not None:
+        event_filters.append(period_filter)
 
     # 1. Subquery: 每個活動的有效報名數
     # ------------------------------------------------
@@ -80,21 +108,13 @@ def list_public_events(
             selectinload(Event.event_category),
             selectinload(Event.organizer),
         )
-        .filter(
-            Event.status == EventStatus.PUBLISHED,
-            Event.is_deleted == False,
-            Event.is_active == True,
-        )
+        .filter(*event_filters)
     )
 
     # 3. Count Total (Fix: separate count query)
     # ------------------------------------------------
     # query.count() 會因為 select 了多個欄位而出錯，這裡使用獨立查詢
-    total = db.query(func.count(Event.id)).filter(
-        Event.status == EventStatus.PUBLISHED,
-        Event.is_deleted == False,
-        Event.is_active == True,
-    ).scalar()
+    total = db.query(func.count(Event.id)).filter(*event_filters).scalar()
 
     # 4. Execute Query
     # ------------------------------------------------
