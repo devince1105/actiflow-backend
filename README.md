@@ -250,7 +250,10 @@ ActiFlow 將後台分為兩個責任範圍：
 
 - `super_admin` membership 辨識
 - `/admin` route guard 與系統管理入口
-- 系統管理總覽頁骨架
+- 系統管理總覽與即時統計 API
+- 會員列表、Email 搜尋與分頁
+- 主辦單位列表與待審申請清單
+- 主辦申請核准／拒絕流程（包含確認原因、transaction 與 audit log）
 - `/admin/dashboard` 舊路徑相容導向
 
 規劃中的管理模組：

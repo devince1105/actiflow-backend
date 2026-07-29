@@ -102,6 +102,7 @@ from app.api.system.organizer_approval import (
 )
 from app.api.admin.dashboard import router as admin_dashboard_router
 from app.api.admin.users_v2 import router as admin_users_router
+from app.api.admin.organizers_v2 import router as admin_organizers_v2_router
 
 # ============================================================
 # Root API Router
@@ -250,6 +251,7 @@ api_router.include_router(
 # ------------------------------------------------------------
 api_router.include_router(admin_dashboard_router)
 api_router.include_router(admin_users_router)
+api_router.include_router(admin_organizers_v2_router)
 
 api_router.include_router(
     admin_organizers_router,
