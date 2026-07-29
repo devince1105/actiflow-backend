@@ -206,6 +206,11 @@ http://localhost:8000/docs
 
 測試必須使用隔離的 `TEST_DATABASE_URL`。請勿將會新增或刪除資料的測試指向正式 Neon database。
 
+pytest 會比較 `DATABASE_URL` 與 `TEST_DATABASE_URL` 的主機、port
+及 database 名稱。兩者位置相同或未設定測試資料庫時，資料庫整合測試會安全跳過，
+純單元及 SQLAlchemy mapper 測試仍會執行。Neon 測試 branch 應使用與正式 branch
+不同的 hostname。
+
 ## 常用目錄
 
 ```text

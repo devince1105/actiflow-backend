@@ -1,14 +1,13 @@
 # tests/test_submission_cascade.py
 
-import pytest
 from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.db import SessionLocal
 from app.models.organizer.organizer import Organizer
 from app.models.event.event import Event
+from app.models.event.event_category import EventCategory
 from app.models.event.event_field import EventField
 from app.models.submission.submission import Submission
 from app.models.submission.submission_value import SubmissionValue
@@ -18,20 +17,6 @@ from app.models.file.file import File
 from datetime import datetime, timedelta, timezone
 
 now = datetime.now(timezone.utc)
-
-@pytest.fixture
-def db() -> Session:
-    """
-    使用真實 PostgreSQL（Neon test branch）
-    每個 test 完成後 rollback，避免污染 DB
-    """
-    session = SessionLocal()
-    try:
-        yield session
-        session.rollback()
-    finally:
-        session.close()
-
 
 def test_submission_cascade_delete(db: Session):
     """
@@ -51,6 +36,18 @@ def test_submission_cascade_delete(db: Session):
     db.add(organizer)
     db.flush()
 
+    category = EventCategory(
+        uuid=uuid4(),
+        code=f"TEST_{uuid4().hex[:8].upper()}",
+        slug=f"test-{uuid4().hex[:8]}",
+        label_zh="測試分類",
+        label_en="Test Category",
+        color="slate",
+        sort_order=999,
+    )
+    db.add(category)
+    db.flush()
+
     # ---------------------------------------------------------
     # 1️⃣ 建立 Event
     # ---------------------------------------------------------
@@ -61,6 +58,7 @@ def test_submission_cascade_delete(db: Session):
         slug=f"cascade-test-event-{uuid4().hex[:6]}",
         status="published",
         organizer_uuid=organizer.uuid,  # ⭐ 關鍵
+        event_category_uuid=category.uuid,
         
         # ⭐ 必填欄位補齊
         start_date=now,
