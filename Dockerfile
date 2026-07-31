@@ -1,8 +1,10 @@
 # 使用 Python 基底
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 # 安裝系統相依套件
-RUN apt-get update && apt-get install -y build-essential
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 # 設定工作目錄
 WORKDIR /app

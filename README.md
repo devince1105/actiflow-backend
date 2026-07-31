@@ -201,10 +201,13 @@ R2 bucket 必須允許前端來源執行 `PUT` CORS。正式部署時請將正�
 ### 1. 建立並啟用虛擬環境
 
 ```bash
-python3 -m venv venv
+python3.11 -m venv venv
 source venv/bin/activate
 python -m pip install -r requirements.txt
 ```
+
+專案根目錄的 `.python-version` 固定為 Python 3.11；使用 pyenv 等版本管理工具時
+會自動套用。Docker image 亦使用相同的 Python minor version。
 
 若既有 venv 是從其他路徑搬移而來，`pip` 的 shebang 可能失效；使用：
 

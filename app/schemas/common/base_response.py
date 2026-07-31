@@ -1,6 +1,6 @@
 # app/schemas/common/base_response.py  ← API Response Wrapper
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Any, Optional
 
 
@@ -14,5 +14,4 @@ class BaseAPIResponse(BaseModel):
     message: str = "OK"
     data: Optional[Any] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
