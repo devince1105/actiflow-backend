@@ -14,7 +14,7 @@ This file uses:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 from typing import Any, Dict, Literal, Optional
 
@@ -46,6 +46,14 @@ from app.crud.event.crud_event import (
 )
 
 from app.models.event.event import Event
+from app.models.event.event_media import EventMedia
+from app.models.event.event_category import EventCategory
+from app.schemas.media.image_upload import (
+    EventCoverUploadCompleteRequest,
+    EventCoverUploadCompleteResponse,
+    ImageUploadPurpose,
+)
+from app.services.media.r2_storage import complete_image_upload
 from app.api.utils.slug import generate_slug
 
 
@@ -147,7 +155,7 @@ def get_event_detail(
         raise HTTPException(status_code=403, detail="Organizer mismatch")
 
     event = _get_event_or_404(db, event_uuid, organizer_uuid)
-    return OrganizerEventResponse.model_validate(event)
+    return _to_event_response(event)
 
 
 # -------------------------------------------------------------------
@@ -165,6 +173,7 @@ def create_event(
         raise HTTPException(status_code=403, detail="Organizer mismatch")
 
     payload = data.model_dump(exclude_none=True, exclude={"status"})
+    _require_active_event_category(db, data.event_category_uuid)
 
     # ---- normalize title/name (MVP compatibility) ----
     title = payload.pop("title", None)
@@ -215,7 +224,7 @@ def create_event(
     db.commit()
     db.refresh(event)
 
-    return OrganizerEventResponse.model_validate(event)
+    return _to_event_response(event)
 
 
 # -------------------------------------------------------------------
@@ -245,6 +254,17 @@ def update_event(
         raise HTTPException(
             status_code=400,
             detail="Event status must be changed via publish/unpublish/close APIs",
+        )
+
+    if "event_category_uuid" in update_data:
+        _require_active_event_category(db, update_data["event_category_uuid"])
+    if (
+        "max_capacity" in update_data
+        and update_data["max_capacity"] < event.current_attendance
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Capacity cannot be lower than current attendance",
         )
 
     # ---- normalize title/name (MVP compatibility) ----
@@ -300,7 +320,59 @@ def update_event(
     db.commit()
     db.refresh(event)
 
-    return OrganizerEventResponse.model_validate(event)
+    return _to_event_response(event)
+
+
+@router.put(
+    "/{event_uuid}/cover",
+    response_model=EventCoverUploadCompleteResponse,
+)
+def complete_event_cover_upload(
+    organizer_uuid: UUID,
+    event_uuid: UUID,
+    data: EventCoverUploadCompleteRequest,
+    db: Session = Depends(get_db),
+    membership=Depends(require_current_organizer_admin),
+):
+    if membership.organizer_uuid != organizer_uuid:
+        raise HTTPException(status_code=403, detail="Organizer mismatch")
+    event = _get_event_or_404(db, event_uuid, organizer_uuid)
+    try:
+        cover_url = complete_image_upload(
+            user_uuid=membership.user_uuid,
+            purpose=ImageUploadPurpose.EVENT_COVER,
+            object_key=data.object_key,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Media storage is not configured",
+        ) from exc
+
+    (
+        db.query(EventMedia)
+        .filter(
+            EventMedia.event_uuid == event.uuid,
+            EventMedia.is_cover == True,
+            EventMedia.is_deleted == False,
+        )
+        .update({EventMedia.is_cover: False})
+    )
+    media = EventMedia(
+        event_uuid=event.uuid,
+        media_type="image",
+        url=cover_url,
+        title="活動封面",
+        is_cover=True,
+        sort_order=0,
+        created_by=membership.user_uuid,
+        created_by_role=membership.role,
+    )
+    db.add(media)
+    db.commit()
+    return EventCoverUploadCompleteResponse(cover_image_url=cover_url)
 
 
 # -------------------------------------------------------------------
@@ -330,11 +402,10 @@ def delete_event(
     return
 
 # -------------------------------------------------------------------
-# Publish event (draft -> published)
-# PATCH /organizers/{organizer_uuid}/events/{event_uuid}/publish
+# Submit event for platform review
 # -------------------------------------------------------------------
-@router.patch("/{event_uuid}/publish", response_model=OrganizerEventResponse)
-def publish_event(
+@router.patch("/{event_uuid}/submit-review", response_model=OrganizerEventResponse)
+def submit_event_for_review(
     organizer_uuid: UUID,
     event_uuid: UUID,
     db: Session = Depends(get_db),
@@ -347,10 +418,14 @@ def publish_event(
 
     assert_event_status_transition(
         current=EventStatus(event.status),
-        target=EventStatus.PUBLISHED,
+        target=EventStatus.PENDING_REVIEW,
     )
 
-    event.status = EventStatus.PUBLISHED
+    event.status = EventStatus.PENDING_REVIEW
+    event.submitted_for_review_at = datetime.now(timezone.utc)
+    event.reviewed_at = None
+    event.reviewer_uuid = None
+    event.review_reason = None
     event.updated_by = membership.user_uuid
     event.updated_by_role = membership.role
 
@@ -361,7 +436,7 @@ def publish_event(
 
 
 # -------------------------------------------------------------------
-# Unpublish event (published -> draft)
+# Unpublish event (published -> draft; publishing again requires review)
 # PATCH /organizers/{organizer_uuid}/events/{event_uuid}/unpublish
 # -------------------------------------------------------------------
 @router.patch("/{event_uuid}/unpublish", response_model=OrganizerEventResponse)
@@ -449,3 +524,30 @@ def _get_event_or_404(
         raise HTTPException(status_code=404, detail="Event not found")
 
     return event
+
+
+def _to_event_response(event: Event) -> OrganizerEventResponse:
+    response = OrganizerEventResponse.model_validate(event)
+    cover = next(
+        (
+            media.url
+            for media in event.media
+            if media.is_cover and not media.is_deleted
+        ),
+        None,
+    )
+    return response.model_copy(update={"cover_image_url": cover})
+
+
+def _require_active_event_category(db: Session, category_uuid: UUID) -> None:
+    category = (
+        db.query(EventCategory.uuid)
+        .filter(
+            EventCategory.uuid == category_uuid,
+            EventCategory.is_active == True,
+            EventCategory.is_deleted == False,
+        )
+        .first()
+    )
+    if not category:
+        raise HTTPException(status_code=422, detail="Invalid event category")

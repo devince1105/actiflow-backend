@@ -3,6 +3,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 from datetime import datetime
+from uuid import UUID
 
 
 class OrganizerEventUpdate(BaseModel):
@@ -28,6 +29,10 @@ class OrganizerEventUpdate(BaseModel):
         None,
         description="活動描述",
     )
+
+    event_category_uuid: Optional[UUID] = None
+    location: Optional[str] = Field(default=None, max_length=255)
+    max_capacity: Optional[int] = Field(default=None, ge=1, le=100000)
 
     start_date: Optional[datetime] = Field(
         None,

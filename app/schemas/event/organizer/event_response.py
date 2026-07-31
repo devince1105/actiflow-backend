@@ -17,14 +17,21 @@ class OrganizerEventResponse(BaseModel):
 
     name: str
     description: Optional[str] = None
+    event_category_uuid: UUID
+    location: Optional[str] = None
+    max_capacity: int
 
     start_date: datetime
     end_date: Optional[datetime] = None
     registration_deadline: Optional[datetime] = None
+    submitted_for_review_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+    review_reason: Optional[str] = None
 
     status: str
 
     config: Optional[Dict[str, Any]] = None
+    cover_image_url: Optional[str] = None
 
     created_at: datetime
     updated_at: Optional[datetime] = None
