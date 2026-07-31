@@ -19,6 +19,9 @@ class AdminEventListItem(BaseModel):
     max_capacity: int
     current_attendance: int
     submissions_count: int
+    submitted_for_review_at: datetime | None = None
+    reviewed_at: datetime | None = None
+    review_reason: str | None = None
 
 
 class AdminEventListResponse(BaseModel):
@@ -32,3 +35,8 @@ class AdminEventListResponse(BaseModel):
 class AdminEventModerationRequest(BaseModel):
     status: Literal["published", "closed"]
     reason: str = Field(min_length=3, max_length=500)
+
+
+class AdminEventReviewRequest(BaseModel):
+    decision: Literal["approve", "reject"]
+    reason: str | None = Field(default=None, max_length=1000)

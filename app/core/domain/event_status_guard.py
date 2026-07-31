@@ -20,7 +20,14 @@ from app.core.constants.event_status import EventStatus
 # current_status -> allowed target statuses
 ALLOWED_EVENT_STATUS_TRANSITIONS: dict[EventStatus, set[EventStatus]] = {
     EventStatus.DRAFT: {
+        EventStatus.PENDING_REVIEW,
+    },
+    EventStatus.CHANGES_REQUESTED: {
+        EventStatus.PENDING_REVIEW,
+    },
+    EventStatus.PENDING_REVIEW: {
         EventStatus.PUBLISHED,
+        EventStatus.CHANGES_REQUESTED,
     },
     EventStatus.PUBLISHED: {
         EventStatus.DRAFT,     # unpublish

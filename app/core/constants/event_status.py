@@ -23,6 +23,8 @@ class EventStatus(str, Enum):
     """
 
     DRAFT = "draft"
+    PENDING_REVIEW = "pending_review"
+    CHANGES_REQUESTED = "changes_requested"
     PUBLISHED = "published"
     CLOSED = "closed"
 

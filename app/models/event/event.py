@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from app.models.event.event_report import EventReportCache
     from app.models.event.event_ticket import EventTicket
     from app.models.submission.submission import Submission
-    
+
 # ---------------------------------------------------------
 
 class Event(BaseModel, Base):
@@ -82,7 +82,6 @@ class Event(BaseModel, Base):
         nullable=False,
         default=0,
     )
-    
     # ---------------------------------------------------------
     # 外鍵：活動分類
     # ---------------------------------------------------------
@@ -165,6 +164,17 @@ class Event(BaseModel, Base):
         nullable=True,
     )
 
+    submitted_for_review_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reviewer_uuid: Mapped[Optional[PyUUID]] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True
+    )
+    review_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     # 活動其他設定
     config: Mapped[Optional[dict]] = mapped_column(
         JSONB,
@@ -246,6 +256,3 @@ class Event(BaseModel, Base):
         lazy="selectin",
         cascade="all, delete-orphan",
     )
-
-
-    
