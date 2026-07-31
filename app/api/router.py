@@ -6,6 +6,8 @@ from fastapi import APIRouter
 # Auth
 # =======================
 from app.api.auth.login import router as login_router
+from app.api.auth.register import router as register_router
+from app.api.auth.email_verification import router as email_verification_router
 from app.api.auth.refresh import router as refresh_router
 from app.api.auth.me import router as auth_me_router
 from app.api.auth.logout import router as logout_router
@@ -34,18 +36,17 @@ from app.api.events.public.submissions import router as public_submissions_route
 from app.api.users.me.me import router as users_me_router
 from app.api.users.me.submissions import router as users_me_submissions_router
 from app.api.users.me.participations import router as users_me_participations_router
-from app.api.uploads.images import router as image_uploads_router
-
-# =======================
-# Organizers (Public)
-# =======================
-from app.api.organizers.public.organizers import (
-    router as public_organizers_router,
+from app.api.users.me.organizer_applications import (
+    router as users_me_organizer_applications_router,
 )
+from app.api.uploads.images import router as image_uploads_router
 
 # =======================
 # Organizers (Organizer scope)
 # =======================
+from app.api.organizers.organizer.detail import (
+    router as organizer_detail_router,
+)
 from app.api.organizers.organizer.dashboard import (
     router as organizer_dashboard_router,
 )
@@ -117,6 +118,8 @@ api_router = APIRouter()
 # Auth
 # ------------------------------------------------------------
 api_router.include_router(login_router, prefix="/auth", tags=["Auth"])
+api_router.include_router(register_router, prefix="/auth", tags=["Auth"])
+api_router.include_router(email_verification_router)
 api_router.include_router(refresh_router, prefix="/auth", tags=["Auth"])
 api_router.include_router(auth_me_router, prefix="/auth", tags=["Auth"])
 api_router.include_router(logout_router, prefix="/auth", tags=["Auth"])
@@ -133,15 +136,6 @@ api_router.include_router(
     email_resend_router,
     prefix="/public/email",
     tags=["Public - Email"],
-)
-
-# ------------------------------------------------------------
-# Public - Organizers
-# ------------------------------------------------------------
-api_router.include_router(
-    public_organizers_router,
-    prefix="/public/organizers",
-    tags=["Public - Organizers"],
 )
 
 # ------------------------------------------------------------
@@ -192,11 +186,18 @@ api_router.include_router(
     users_me_participations_router,
     tags=["Users - Me - Participations"],
 )
+api_router.include_router(users_me_organizer_applications_router)
 api_router.include_router(image_uploads_router)
 
 # ------------------------------------------------------------
 # Organizer scope
 # ------------------------------------------------------------
+api_router.include_router(
+    organizer_detail_router,
+    prefix="/organizers/{organizer_uuid}",
+    tags=["Organizer - Detail"],
+)
+
 api_router.include_router(
     organizer_dashboard_router,
     prefix="/organizers/{organizer_uuid}",

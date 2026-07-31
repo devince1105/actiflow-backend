@@ -15,6 +15,7 @@ class UserPublic(BaseModel):
     uuid: UUID
     email: EmailStr
     name: Optional[str] = None
+    avatar_url: Optional[str] = None
     role: str = "user"
 
     memberships: List[

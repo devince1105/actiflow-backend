@@ -16,6 +16,7 @@ from app.schemas.organizer.dashboard import (
 
 from app.models.event.event import Event
 from app.models.membership.organizer_membership import OrganizerMembership
+from app.models.organizer.organizer import Organizer
 
 
 router = APIRouter(
@@ -36,6 +37,16 @@ def get_dashboard(
     """
     Organizer 後台 Dashboard（UX 用）
     """
+    organizer_name = (
+        db.query(Organizer.name)
+        .filter(
+            Organizer.uuid == organizer_uuid,
+            Organizer.is_deleted == False,
+        )
+        .scalar()
+    )
+    if organizer_name is None:
+        organizer_name = "Organizer"
 
     # members count
     members_count = (
@@ -65,7 +76,7 @@ def get_dashboard(
 
     return OrganizerDashboardResponse(
         organizer_uuid=organizer_uuid,
-        organizer_name="Organizer",  # 可之後補真資料
+        organizer_name=organizer_name,
         stats=OrganizerDashboardStats(
             members_count=members_count,
             events_count=events_count,

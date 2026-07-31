@@ -65,6 +65,12 @@ class User(BaseModel, Base):
         comment="登入方式 (local, google, etc)",
     )
 
+    avatar_url: Mapped[Optional[str]] = mapped_column(
+        String,
+        nullable=True,
+        comment="使用者頭像網址",
+    )
+
     from sqlalchemy.dialects.postgresql import JSONB
     config: Mapped[dict] = mapped_column(
         JSONB,

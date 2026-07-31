@@ -123,6 +123,7 @@ def get_me(
     return {
         "uuid": str(current_user.uuid),
         "email": current_user.email,
+        "avatar_url": current_user.avatar_url,
         "role": "user",
         "memberships": memberships,
     }
