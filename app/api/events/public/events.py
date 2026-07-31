@@ -201,7 +201,7 @@ def list_public_events(
         # ------------------------------
         # Capacity
         # ------------------------------
-        capacity = event.config.get("capacity") if event.config else None
+        capacity = event.max_capacity
 
         items.append(
             EventPublicListItem(
@@ -349,7 +349,7 @@ def get_public_event(
         )
     
     # Capacity
-    capacity = event.config.get("capacity") if event.config else None
+    capacity = event.max_capacity
 
     return EventPublicListItem(
         uuid=event.uuid,

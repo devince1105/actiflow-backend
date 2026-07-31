@@ -4,7 +4,7 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.schemas.event.category.event_category_public import (
     EventCategoryPublic,
@@ -69,8 +69,11 @@ class EventDetailPublic(BaseModel):
     # ✅ 活動內容（Editor blocks）
     content: Optional[EventContentPublic] = None
 
+    # 容量控制
+    max_capacity: int = 0
+    current_attendance: int = 0
+
     # 其他未結構化資料
     extra: Dict[str, Any]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
