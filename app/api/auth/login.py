@@ -8,6 +8,7 @@ from app.core.db import get_db
 from app.core.security import verify_password
 from app.core.jwt import create_access_token
 from app.core.config import settings
+from app.core.exceptions import ActiFlowBusinessException, ActiFlowErrorCode
 
 from app.crud.user.crud_user import user_crud
 from app.crud.user.crud_refresh_token import refresh_token_crud
@@ -49,6 +50,13 @@ def unified_login(
     if not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
+    if not user.is_email_verified:
+        raise ActiFlowBusinessException(
+            code=ActiFlowErrorCode.EMAIL_NOT_VERIFIED,
+            message="請先完成 Email 驗證",
+            status_code=403,
+        )
+
     # 3. 建立 Access Token（只放 identity）
     access_token = create_access_token({
         "sub": str(user.uuid),
@@ -89,4 +97,3 @@ def unified_login(
             "email": user.email,
         },
     }
-
