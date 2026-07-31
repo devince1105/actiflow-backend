@@ -33,6 +33,11 @@ def to_submission_response(s: Submission) -> SubmissionResponse:
                     if v.field is not None
                     else None
                 ),
+                field_label=(
+                    v.field.name
+                    if v.field is not None
+                    else v.field_key
+                ),
                 value=v.value,
                 uploaded_files=[
                     f.uuid for f in (v.files or [])

@@ -141,3 +141,15 @@ def get_current_user_obj(
         )
 
     return user
+
+def get_optional_user(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict | None:
+    """
+    Optional auth dependency.
+    """
+    try:
+        return get_current_user(request, db)
+    except HTTPException:
+        return None

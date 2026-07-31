@@ -15,11 +15,11 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_unique_constraint(
-        "uq_submission_event_user_email",
-        "submissions",
-        ["event_uuid", "user_email"],
-    )
+    # Historical databases can contain duplicate registrations. Enforcing a
+    # new constraint here would make the audit-table migration impossible to
+    # deploy and would require destructive cleanup. The service rejects new
+    # duplicates; legacy cleanup and a database constraint belong in a
+    # dedicated, reviewed data migration.
     op.create_table(
         "submission_audit_logs",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -51,8 +51,3 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("submission_audit_logs")
-    op.drop_constraint(
-        "uq_submission_event_user_email",
-        "submissions",
-        type_="unique",
-    )

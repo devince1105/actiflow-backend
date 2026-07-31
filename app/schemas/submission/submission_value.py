@@ -11,6 +11,7 @@ from uuid import UUID
 class SubmissionValueBase(BaseModel):
     field_uuid: UUID                  # 對應 EventField.uuid
     field_type: str                   # text / number / select / checkbox / date / file ...
+    field_label: Optional[str] = None # 活動欄位標題 (Name / Email / 專長...)
     value: Any                        # 真正的欄位值
     uploaded_file: Optional[str] = None  # Upload 類型欄位會用到
 
