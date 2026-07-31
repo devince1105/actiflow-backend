@@ -6,6 +6,7 @@ from urllib.parse import quote
 from uuid import UUID, uuid4
 
 import boto3
+from botocore.exceptions import ClientError
 
 from app.core.config import settings
 from app.schemas.media.image_upload import ImageUploadPurpose
@@ -94,3 +95,42 @@ def create_image_upload(
         "max_size_bytes": max_size,
         "expires_in": PRESIGNED_URL_EXPIRES_IN,
     }
+
+
+def complete_avatar_upload(*, user_uuid: UUID, object_key: str) -> str:
+    return complete_image_upload(
+        user_uuid=user_uuid,
+        purpose=ImageUploadPurpose.AVATAR,
+        object_key=object_key,
+    )
+
+
+def complete_image_upload(
+    *,
+    user_uuid: UUID,
+    purpose: ImageUploadPurpose,
+    object_key: str,
+) -> str:
+    expected_prefix = f"uploads/{purpose.value}/{user_uuid}/"
+    if not object_key.startswith(expected_prefix):
+        raise ValueError("Avatar object does not belong to the current user")
+
+    client = get_r2_client()
+    try:
+        metadata = client.head_object(
+            Bucket=settings.R2_BUCKET_NAME,
+            Key=object_key,
+        )
+    except ClientError as exc:
+        raise ValueError("Uploaded avatar was not found") from exc
+
+    content_type = metadata.get("ContentType", "")
+    if content_type not in ALLOWED_IMAGE_TYPES:
+        raise ValueError("Uploaded object is not a supported image")
+
+    content_length = metadata.get("ContentLength", 0)
+    max_size = MAX_IMAGE_SIZE_BY_PURPOSE[purpose]
+    if not isinstance(content_length, int) or not 0 < content_length <= max_size:
+        raise ValueError("Uploaded avatar has an invalid size")
+
+    return f"{settings.R2_PUBLIC_BASE_URL.rstrip('/')}/{quote(object_key)}"

@@ -22,6 +22,11 @@ from app.schemas.user.account_settings import (
     NotificationSettingsUpdate,
     PasswordChangeRequest,
 )
+from app.schemas.media.image_upload import (
+    AvatarUploadCompleteRequest,
+    AvatarUploadCompleteResponse,
+)
+from app.services.media.r2_storage import complete_avatar_upload
 from app.core.roles import ACTIVE_ORGANIZER_ROLES
 
 router = APIRouter(
@@ -129,53 +134,35 @@ def get_current_user(
 
 
 # ============================================================
-# PUT /users/me
+# PUT /users/me/avatar
 # ============================================================
-from app.schemas.user.user_update import UserUpdate
-from app.crud.user.crud_user import user_crud
-
-@router.put("")
-def update_current_user(
-    data: UserUpdate,
-    request: Request,
+@router.put(
+    "/avatar",
+    response_model=AvatarUploadCompleteResponse,
+)
+def complete_current_user_avatar(
+    data: AvatarUploadCompleteRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_obj),
 ):
-    """
-    更新目前登入使用者的資訊（例如：頭像網址）
-    """
-    access_token = request.cookies.get("access_token")
-    if not access_token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    payload = decode_access_token(access_token)
-    user_uuid = payload.get("sub")
-    if not user_uuid:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    current_user = (
-        db.query(User)
-        .filter(
-            User.uuid == user_uuid,
-            User.is_deleted == False,
+    """Verify an R2 object owned by the user, then save it as their avatar."""
+    try:
+        avatar_url = complete_avatar_upload(
+            user_uuid=current_user.uuid,
+            object_key=data.object_key,
         )
-        .first()
-    )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Media storage is not configured",
+        ) from exc
 
-    if not current_user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # 執行更新
-    updated_user = user_crud.update(
-        db=db,
-        db_obj=current_user,
-        data=data
-    )
-
-    return {
-        "status": "success",
-        "message": "User updated successfully",
-        "avatar_url": updated_user.avatar_url
-    }
+    current_user.avatar_url = avatar_url
+    db.commit()
+    db.refresh(current_user)
+    return AvatarUploadCompleteResponse(avatar_url=avatar_url)
 
 
 @router.get(

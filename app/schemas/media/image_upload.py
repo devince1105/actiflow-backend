@@ -23,3 +23,19 @@ class ImageUploadPresignResponse(BaseModel):
     content_type: str
     max_size_bytes: int
     expires_in: int
+
+
+class AvatarUploadCompleteRequest(BaseModel):
+    object_key: str = Field(min_length=1, max_length=1024)
+
+
+class AvatarUploadCompleteResponse(BaseModel):
+    avatar_url: str
+
+
+class EventCoverUploadCompleteRequest(BaseModel):
+    object_key: str = Field(min_length=1, max_length=1024)
+
+
+class EventCoverUploadCompleteResponse(BaseModel):
+    cover_image_url: str
