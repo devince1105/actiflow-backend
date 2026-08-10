@@ -19,6 +19,9 @@ class AdminOrganizerListItem(BaseModel):
 class AdminOrganizerListResponse(BaseModel):
     items: list[AdminOrganizerListItem]
     total: int
+    page: int
+    page_size: int
+    pages: int
 
 
 class AdminOrganizerApplicationItem(BaseModel):

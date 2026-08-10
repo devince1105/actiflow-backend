@@ -11,9 +11,12 @@ from app.models.event.event import Event
 from app.models.organizer.organizer import Organizer
 from app.models.organizer.organizer_application import OrganizerApplication
 from app.models.submission.submission import Submission
+from app.models.submission.enums import SubmissionStatus
+from app.models.system.system_audit_log import SystemAuditLog
 from app.models.user.user import User
 from app.schemas.admin.dashboard import (
     AdminDashboardResponse,
+    AdminDashboardAuditItem,
     AdminEventStats,
 )
 
@@ -50,6 +53,14 @@ def get_admin_dashboard(
         .all()
     )
 
+    recent_audit_logs = (
+        db.query(SystemAuditLog)
+        .filter(SystemAuditLog.is_deleted == False)
+        .order_by(SystemAuditLog.timestamp.desc(), SystemAuditLog.id.desc())
+        .limit(5)
+        .all()
+    )
+
     return AdminDashboardResponse(
         users_total=db.query(func.count(User.id))
         .filter(User.is_deleted == False, User.is_active == True)
@@ -69,6 +80,22 @@ def get_admin_dashboard(
         )
         .scalar()
         or 0,
+        pending_submissions=db.query(func.count(Submission.id))
+        .filter(
+            Submission.status == SubmissionStatus.pending,
+            Submission.is_deleted == False,
+            Submission.is_active == True,
+        )
+        .scalar()
+        or 0,
+        unverified_users=db.query(func.count(User.id))
+        .filter(
+            User.is_email_verified == False,
+            User.is_deleted == False,
+            User.is_active == True,
+        )
+        .scalar()
+        or 0,
         submissions_total=db.query(func.count(Submission.id))
         .filter(
             Submission.is_deleted == False,
@@ -79,6 +106,12 @@ def get_admin_dashboard(
         events=AdminEventStats(
             total=sum(event_status_counts.values()),
             draft=event_status_counts.get(EventStatus.DRAFT, 0),
+            pending_review=event_status_counts.get(
+                EventStatus.PENDING_REVIEW, 0
+            ),
+            changes_requested=event_status_counts.get(
+                EventStatus.CHANGES_REQUESTED, 0
+            ),
             published=event_status_counts.get(EventStatus.PUBLISHED, 0),
             closed=event_status_counts.get(EventStatus.CLOSED, 0),
             upcoming=db.query(func.count(Event.id))
@@ -98,4 +131,16 @@ def get_admin_dashboard(
             .scalar()
             or 0,
         ),
+        recent_audit_logs=[
+            AdminDashboardAuditItem(
+                uuid=log.uuid,
+                audit_code=log.audit_code,
+                user_email=log.user_email,
+                action=log.action,
+                target_type=log.target_type,
+                target_uuid=log.target_uuid,
+                timestamp=log.timestamp,
+            )
+            for log in recent_audit_logs
+        ],
     )

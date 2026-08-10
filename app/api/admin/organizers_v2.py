@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from math import ceil
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -31,6 +32,8 @@ router = APIRouter(
 @router.get("", response_model=AdminOrganizerListResponse)
 def list_admin_organizers(
     search: str = Query(default="", max_length=200),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
     _admin=Depends(require_super_admin),
 ):
@@ -39,7 +42,13 @@ def list_admin_organizers(
     if normalized_search:
         query = query.filter(Organizer.name.ilike(f"%{normalized_search}%"))
 
-    organizers = query.order_by(Organizer.created_at.desc()).all()
+    total = query.count()
+    organizers = (
+        query.order_by(Organizer.created_at.desc(), Organizer.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
     organizer_uuids = [organizer.uuid for organizer in organizers]
     member_counts: dict = {}
     event_counts: dict = {}
@@ -82,7 +91,10 @@ def list_admin_organizers(
             )
             for organizer in organizers
         ],
-        total=len(organizers),
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=ceil(total / page_size) if total else 0,
     )
 
 
