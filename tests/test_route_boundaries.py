@@ -49,6 +49,19 @@ def test_canonical_organizer_detail_route_is_mounted():
     assert methods["/organizers/{organizer_uuid}"] == {"GET"}
 
 
+def test_canonical_organizer_submission_detail_and_actions_are_mounted():
+    methods = _methods_by_path()
+    base = (
+        "/organizers/{organizer_uuid}/events/{event_uuid}/submissions/"
+        "{submission_uuid}"
+    )
+
+    assert methods[base] == {"GET"}
+    assert methods[f"{base}/approve"] == {"POST"}
+    assert methods[f"{base}/reject"] == {"POST"}
+    assert methods[f"{base}/reopen"] == {"POST"}
+
+
 def test_legacy_organizer_crud_is_not_mounted_under_public_prefix():
     methods = _methods_by_path()
 

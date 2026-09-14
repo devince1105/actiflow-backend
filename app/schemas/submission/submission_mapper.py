@@ -21,6 +21,8 @@ def to_submission_response(s: Submission) -> SubmissionResponse:
         submission_code=s.submission_code,
         status=s.status.value if hasattr(s.status, "value") else s.status,
         created_at=s.created_at,
+        status_reason=s.status_reason,
+        notes=s.notes,
         user_name=getattr(s, "user_name", None),
         user_email=getattr(s, "user_email", None),
         values=[

@@ -67,6 +67,44 @@ def test_rejected_submission_can_be_reopened():
     assert_status_transition(current="rejected", target="pending")
 
 
+def test_completed_submission_reopens_to_paid(db):
+    event = _create_registration_event(db)
+    submission = _register(db, event, "reopen-completed@example.com")
+    submission.status = "completed"
+    db.commit()
+
+    reopened = SubmissionService.reopen_submission(
+        db=db,
+        submission_uuid=submission.uuid,
+        actor_id=uuid4(),
+        actor_role="organizer",
+        reason="Review again",
+    )
+
+    assert reopened.status.value == "paid"
+    assert reopened.notes == "Review again"
+
+
+def test_rejected_submission_reopens_to_pending(db):
+    event = _create_registration_event(db)
+    submission = _register(db, event, "reopen-rejected@example.com")
+    submission.status = "rejected"
+    event.current_attendance = 0
+    db.commit()
+
+    reopened = SubmissionService.reopen_submission(
+        db=db,
+        submission_uuid=submission.uuid,
+        actor_id=uuid4(),
+        actor_role="organizer",
+        reason="New information",
+    )
+
+    assert reopened.status.value == "pending"
+    assert reopened.status_reason is None
+    assert reopened.notes == "New information"
+
+
 def test_naive_registration_deadline_does_not_raise_type_error():
     event = SimpleNamespace(
         status="published",

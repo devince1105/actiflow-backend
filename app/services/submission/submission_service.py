@@ -225,6 +225,81 @@ class SubmissionService:
         return submission
 
     @staticmethod
+    def reopen_submission(
+        db: Session,
+        submission_uuid: UUID,
+        actor_id: UUID = None,
+        actor_role: str = "",
+        reason: str = None,
+        background_tasks: BackgroundTasks = None,
+    ) -> Submission:
+        if actor_role not in {"organizer", "admin"}:
+            raise ActiFlowBusinessException(
+                code=ActiFlowErrorCode.UNAUTHORIZED,
+                message=f"Role '{actor_role}' not allowed to reopen submissions",
+                status_code=403,
+            )
+
+        submission = (
+            db.query(Submission)
+            .filter(Submission.uuid == submission_uuid)
+            .first()
+        )
+        if not submission:
+            raise ActiFlowBusinessException(
+                code=ActiFlowErrorCode.EVENT_NOT_FOUND,
+                message="Submission not found",
+                status_code=404,
+            )
+
+        old_status = (
+            submission.status.value
+            if hasattr(submission.status, "value")
+            else submission.status
+        )
+        target_status = "paid" if old_status == "completed" else "pending"
+
+        from app.crud.submission.crud_submission_status import assert_status_transition
+        try:
+            assert_status_transition(current=old_status, target=target_status)
+        except Exception as exc:
+            raise ActiFlowBusinessException(
+                code=ActiFlowErrorCode.INVALID_STATUS_TRANSITION,
+                message=str(exc),
+                status_code=409,
+            ) from exc
+
+        SubmissionService._adjust_capacity_for_transition(
+            db, submission.event_uuid, old_status, target_status
+        )
+        submission.status = target_status
+        submission.status_reason = None
+        submission.notes = reason
+        submission.updated_at = datetime.now(timezone.utc)
+
+        from app.models.submission.submission_audit import SubmissionAuditLog
+        db.add(
+            SubmissionAuditLog(
+                submission_uuid=submission_uuid,
+                actor_uuid=actor_id,
+                actor_role=actor_role,
+                action_type="reopened",
+                old_status=old_status,
+                new_status=target_status,
+                reason=reason,
+            )
+        )
+
+        db.commit()
+        db.refresh(submission)
+        # Reopen notifications use the existing pending notification template,
+        # including when a completed submission returns to paid review state.
+        SubmissionService._queue_notification(
+            submission, "pending", background_tasks
+        )
+        return submission
+
+    @staticmethod
     def bulk_action(db: Session, event_uuid: UUID, submission_uuids: list[UUID], action: str, actor_id: UUID, actor_role: str, reason: str = None, background_tasks: BackgroundTasks = None) -> dict:
         ACTION_MAP = {"approve": "completed", "reject": "rejected", "reopen": "pending", "cancel": "canceled"}
         target_status = ACTION_MAP.get(action)

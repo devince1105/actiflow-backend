@@ -9,7 +9,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func, or_
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.db import get_db
 from app.core.dependencies import require_current_organizer_admin
@@ -32,6 +32,47 @@ class BulkActionRequest(BaseModel):
     action: str # approve, reject, reopen, cancel
     submission_uuids: List[UUID]
     reason: Optional[str] = None
+
+
+class SubmissionReasonRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
+def _get_owned_submission(
+    db: Session,
+    *,
+    organizer_uuid: UUID,
+    event_uuid: UUID,
+    submission_uuid: UUID,
+) -> Submission:
+    event_exists = (
+        db.query(Event.uuid)
+        .filter(
+            Event.uuid == event_uuid,
+            Event.organizer_uuid == organizer_uuid,
+            Event.is_deleted == False,
+        )
+        .first()
+    )
+    if not event_exists:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    submission = (
+        db.query(Submission)
+        .options(
+            selectinload(Submission.values).selectinload(SubmissionValue.field),
+            selectinload(Submission.values).selectinload(SubmissionValue.files),
+        )
+        .filter(
+            Submission.uuid == submission_uuid,
+            Submission.event_uuid == event_uuid,
+            Submission.is_deleted == False,
+        )
+        .first()
+    )
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    return submission
 
 @router.get("", response_model=Dict[str, Any])
 def list_event_submissions(
@@ -181,3 +222,97 @@ def export_event_submissions(
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+@router.get("/{submission_uuid}", response_model=SubmissionResponse)
+def get_event_submission(
+    event_uuid: UUID,
+    submission_uuid: UUID,
+    db: Session = Depends(get_db),
+    membership=Depends(require_current_organizer_admin),
+):
+    submission = _get_owned_submission(
+        db,
+        organizer_uuid=membership.organizer_uuid,
+        event_uuid=event_uuid,
+        submission_uuid=submission_uuid,
+    )
+    return to_submission_response(submission)
+
+
+@router.post("/{submission_uuid}/approve", response_model=SubmissionResponse)
+def approve_event_submission(
+    event_uuid: UUID,
+    submission_uuid: UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    membership=Depends(require_current_organizer_admin),
+):
+    _get_owned_submission(
+        db,
+        organizer_uuid=membership.organizer_uuid,
+        event_uuid=event_uuid,
+        submission_uuid=submission_uuid,
+    )
+    submission = SubmissionService.update_status(
+        db=db,
+        submission_uuid=submission_uuid,
+        target_status="completed",
+        actor_id=membership.user_uuid,
+        actor_role="organizer",
+        background_tasks=background_tasks,
+    )
+    return to_submission_response(submission)
+
+
+@router.post("/{submission_uuid}/reject", response_model=SubmissionResponse)
+def reject_event_submission(
+    event_uuid: UUID,
+    submission_uuid: UUID,
+    req: SubmissionReasonRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    membership=Depends(require_current_organizer_admin),
+):
+    _get_owned_submission(
+        db,
+        organizer_uuid=membership.organizer_uuid,
+        event_uuid=event_uuid,
+        submission_uuid=submission_uuid,
+    )
+    submission = SubmissionService.update_status(
+        db=db,
+        submission_uuid=submission_uuid,
+        target_status="rejected",
+        actor_id=membership.user_uuid,
+        actor_role="organizer",
+        reason=req.reason,
+        background_tasks=background_tasks,
+    )
+    return to_submission_response(submission)
+
+
+@router.post("/{submission_uuid}/reopen", response_model=SubmissionResponse)
+def reopen_event_submission(
+    event_uuid: UUID,
+    submission_uuid: UUID,
+    req: SubmissionReasonRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    membership=Depends(require_current_organizer_admin),
+):
+    _get_owned_submission(
+        db,
+        organizer_uuid=membership.organizer_uuid,
+        event_uuid=event_uuid,
+        submission_uuid=submission_uuid,
+    )
+    submission = SubmissionService.reopen_submission(
+        db=db,
+        submission_uuid=submission_uuid,
+        actor_id=membership.user_uuid,
+        actor_role="organizer",
+        reason=req.reason,
+        background_tasks=background_tasks,
+    )
+    return to_submission_response(submission)
