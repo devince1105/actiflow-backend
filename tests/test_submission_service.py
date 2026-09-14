@@ -15,6 +15,7 @@ from app.models.organizer.organizer import Organizer
 from app.models.submission.submission import Submission
 from app.models.submission.submission_audit import SubmissionAuditLog
 from app.services.submission.submission_service import SubmissionService
+from app.api.utils.submission_code import generate_submission_code
 
 
 class _Result:
@@ -30,6 +31,15 @@ class _FakeDb:
     def execute(self, statement):
         self.statements.append(statement)
         return _Result(self.rowcount)
+
+
+def test_submission_codes_are_unique_within_the_same_second():
+    first = generate_submission_code("EVT-TEST")
+    second = generate_submission_code("EVT-TEST")
+
+    assert first != second
+    assert first.startswith("EVT-TEST-")
+    assert second.startswith("EVT-TEST-")
 
 
 def test_reopen_requires_an_available_capacity_slot():
