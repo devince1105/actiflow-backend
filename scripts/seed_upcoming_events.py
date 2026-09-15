@@ -136,24 +136,55 @@ def main() -> None:
             .filter(Event.event_code.in_([item["code"] for item in EVENTS]))
             .all()
         }
+        # Auto-create missing categories
+        category_defs = {
+            "SPORTS_OUTDOOR": {"slug": "sports-outdoor", "label_zh": "運動與戶外活動", "label_en": "Sports & Outdoor", "display_label_zh": "運動 / 戶外", "color": "#10B981", "icon": "Bike"},
+            "PHOTOGRAPHY_MEDIA": {"slug": "photography-media", "label_zh": "攝影與媒體創作", "label_en": "Photography & Media", "display_label_zh": "攝影 / 影像", "color": "#6366F1", "icon": "Camera"},
+            "CHARITY_VOLUNTEER": {"slug": "charity-volunteer", "label_zh": "公益與志工服務", "label_en": "Charity & Volunteer", "display_label_zh": "公益 / 志工", "color": "#EC4899", "icon": "HeartHandshake"},
+            "ARTS_CREATIVE": {"slug": "arts-creative", "label_zh": "藝術與手作創意", "label_en": "Arts & Creative", "display_label_zh": "藝術 / 創作", "color": "#F59E0B", "icon": "Palette"},
+            "WORKSHOPS_LEARNING": {"slug": "workshops-learning", "label_zh": "課程與工作坊", "label_en": "Workshops & Learning", "display_label_zh": "課程 / 工作坊", "color": "#3B82F6", "icon": "BookOpen"},
+            "FAMILY_KIDS": {"slug": "family-kids", "label_zh": "親子與家庭活動", "label_en": "Family & Kids", "display_label_zh": "親子 / 家庭", "color": "#8B5CF6", "icon": "Baby"},
+            "COMMUNITY_MEETUP": {"slug": "community-meetup", "label_zh": "社群與聚會交流", "label_en": "Community & Meetup", "display_label_zh": "社群 / 聚會", "color": "#14B8A6", "icon": "Users"},
+        }
         categories = {
             category.code: category
-            for category in db.query(EventCategory)
-            .filter(
-                EventCategory.code.in_([item["category"] for item in EVENTS]),
-                EventCategory.is_deleted == False,
-            )
-            .all()
+            for category in db.query(EventCategory).all()
         }
+        for code, cat_data in category_defs.items():
+            if code not in categories:
+                cat = EventCategory(
+                    code=code,
+                    slug=cat_data["slug"],
+                    label_zh=cat_data["label_zh"],
+                    label_en=cat_data["label_en"],
+                    display_label_zh=cat_data["display_label_zh"],
+                    color=cat_data["color"],
+                    icon=cat_data["icon"],
+                    sort_order=0,
+                    is_active=True,
+                    is_deleted=False,
+                )
+                db.add(cat)
+                db.flush()
+                categories[code] = cat
+
+        # Auto-create missing organizers
         organizers = {
             organizer.name: organizer
-            for organizer in db.query(Organizer)
-            .filter(
-                Organizer.name.in_([item["organizer"] for item in EVENTS]),
-                Organizer.is_deleted == False,
-            )
-            .all()
+            for organizer in db.query(Organizer).all()
         }
+        needed_organizers = {item["organizer"] for item in EVENTS}
+        for org_name in needed_organizers:
+            if org_name not in organizers:
+                org = Organizer(
+                    name=org_name,
+                    status="approved",
+                    is_active=True,
+                    is_deleted=False,
+                )
+                db.add(org)
+                db.flush()
+                organizers[org_name] = org
 
         created = 0
         skipped = 0
