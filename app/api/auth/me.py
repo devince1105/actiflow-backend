@@ -54,6 +54,7 @@ def get_me(
         db.query(User)
         .filter(
             User.uuid == user_uuid,
+            User.is_active == True,
             User.is_deleted == False,
         )
         .first()
@@ -87,7 +88,10 @@ def get_me(
         )
         .filter(
             OrganizerMembership.user_uuid == current_user.uuid,
+            OrganizerMembership.is_active == True,
+            OrganizerMembership.is_suspended == False,
             OrganizerMembership.is_deleted == False,
+            Organizer.is_active == True,
             Organizer.is_deleted == False,
         )
         .all()
@@ -165,6 +169,7 @@ def get_my_submissions(
         db.query(User)
         .filter(
             User.uuid == user_uuid,
+            User.is_active == True,
             User.is_deleted == False,
         )
         .first()
@@ -219,6 +224,7 @@ def get_my_submission_detail(
         db.query(User)
         .filter(
             User.uuid == user_uuid,
+            User.is_active == True,
             User.is_deleted == False,
         )
         .first()

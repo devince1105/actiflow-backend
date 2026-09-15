@@ -43,9 +43,9 @@ class EventCategory(BaseModel, Base):
         nullable=False,
     )
 
-    label_en: Mapped[str | None] = mapped_column(
+    label_en: Mapped[str] = mapped_column(
         String(100),
-        nullable=True,
+        nullable=False,
     )
 
     display_label_zh: Mapped[str | None] = mapped_column(

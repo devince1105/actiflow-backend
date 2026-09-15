@@ -31,6 +31,8 @@ class SubmissionService:
 
     @staticmethod
     def can_register(event: Event, user_email: str = None) -> bool:
+        if not getattr(event, "is_active", True): return False
+        if getattr(event, "is_deleted", False): return False
         if event.status != "published": return False
         if event.current_attendance >= event.max_capacity: return False
         if event.registration_deadline:
@@ -43,6 +45,66 @@ class SubmissionService:
             if now > deadline:
                 return False
         return True
+
+    @staticmethod
+    def _validated_field_map(
+        db: Session,
+        event_uuid: UUID,
+        values: list,
+    ) -> dict[str, EventField]:
+        event_fields = (
+            db.query(EventField)
+            .filter(
+                EventField.event_uuid == event_uuid,
+                EventField.is_active == True,
+                EventField.is_enabled == True,
+                EventField.is_deleted == False,
+            )
+            .all()
+        )
+        field_map = {field.field_key: field for field in event_fields}
+
+        submitted: dict[str, object] = {}
+        for item in values:
+            if item.field_key in submitted:
+                raise ActiFlowBusinessException(
+                    code=ActiFlowErrorCode.INVALID_SUBMISSION_DATA,
+                    message=f"Duplicate field: {item.field_key}",
+                    status_code=422,
+                )
+            submitted[item.field_key] = item.value
+
+        missing = sorted(
+            field.field_key
+            for field in event_fields
+            if field.required
+            and (
+                field.field_key not in submitted
+                or submitted[field.field_key] is None
+                or submitted[field.field_key] == ""
+                or submitted[field.field_key] == []
+            )
+        )
+        if missing:
+            raise ActiFlowBusinessException(
+                code=ActiFlowErrorCode.INVALID_SUBMISSION_DATA,
+                message="Required registration fields are missing",
+                status_code=422,
+                detail={"missing_fields": missing},
+            )
+
+        unknown = sorted(set(submitted) - set(field_map))
+        if unknown:
+            # The current frontend still has legacy static fields. Preserve
+            # compatibility until the dynamic form contract is completed, but
+            # make ignored input observable without logging submitted values.
+            logger.warning(
+                "Ignoring unknown registration fields for event %s: %s",
+                event_uuid,
+                ", ".join(unknown),
+            )
+
+        return field_map
 
     @staticmethod
     def register_event(
@@ -59,9 +121,23 @@ class SubmissionService:
         extra_data: dict = None,
     ) -> Submission:
         normalized_email = user_email.strip().lower()
-        event = db.query(Event).filter(Event.uuid == event_uuid).first()
+        event = (
+            db.query(Event)
+            .filter(
+                Event.uuid == event_uuid,
+                Event.is_active == True,
+                Event.is_deleted == False,
+            )
+            .first()
+        )
         if not event:
             raise ActiFlowBusinessException(code=ActiFlowErrorCode.EVENT_NOT_FOUND, message="Event not found", status_code=404)
+
+        field_map = SubmissionService._validated_field_map(
+            db,
+            event_uuid,
+            values,
+        )
 
         existing_submission = (
             db.query(Submission.uuid)
@@ -100,14 +176,12 @@ class SubmissionService:
             db.flush()
 
             # Atomic Capacity
-            stmt = update(Event).where(Event.uuid == event_uuid).where(Event.status == "published").where(Event.current_attendance < Event.max_capacity).values(current_attendance=Event.current_attendance + 1)
+            stmt = update(Event).where(Event.uuid == event_uuid).where(Event.status == "published").where(Event.is_active == True).where(Event.is_deleted == False).where(Event.current_attendance < Event.max_capacity).values(current_attendance=Event.current_attendance + 1)
             result = db.execute(stmt)
             if result.rowcount == 0:
                   raise ActiFlowBusinessException(code=ActiFlowErrorCode.EVENT_FULL, message="Event became full")
 
             # Field Values
-            event_fields = db.query(EventField).filter(EventField.event_uuid == event_uuid, EventField.is_deleted == False).all()
-            field_map = {f.field_key: f for f in event_fields}
             sub_values = [SubmissionValue(submission_uuid=submission.uuid, event_field_uuid=field_map[v.field_key].uuid, field_key=v.field_key, value=v.value) for v in values if v.field_key in field_map]
             db.add_all(sub_values)
 

@@ -11,6 +11,7 @@ from app.crud.submission.crud_submission_status import assert_status_transition
 from app.models.auth.email_verification import EmailVerification
 from app.models.event.event import Event
 from app.models.event.event_category import EventCategory
+from app.models.event.event_field import EventField
 from app.models.organizer.organizer import Organizer
 from app.models.submission.submission import Submission
 from app.models.submission.submission_audit import SubmissionAuditLog
@@ -188,6 +189,63 @@ def test_duplicate_registration_returns_conflict(db):
 
     assert exc.value.code == ActiFlowErrorCode.ALREADY_REGISTERED
     assert exc.value.status_code == 409
+
+
+def test_inactive_event_cannot_accept_registration(db):
+    event = _create_registration_event(db)
+    event.is_active = False
+    db.commit()
+
+    with pytest.raises(ActiFlowBusinessException) as exc:
+        _register(db, event, "inactive-event@example.com")
+
+    assert exc.value.code == ActiFlowErrorCode.EVENT_NOT_FOUND
+    assert exc.value.status_code == 404
+
+
+def test_registration_requires_configured_required_fields(db):
+    event = _create_registration_event(db)
+    db.add(
+        EventField(
+            event_uuid=event.uuid,
+            field_key="participant_name",
+            label="Participant name",
+            field_type="text",
+            required=True,
+            sort_order=1,
+            options=[],
+            config={},
+            validation={},
+            is_enabled=True,
+        )
+    )
+    db.commit()
+
+    with pytest.raises(ActiFlowBusinessException) as exc:
+        _register(db, event, "missing-required@example.com")
+
+    assert exc.value.code == ActiFlowErrorCode.INVALID_SUBMISSION_DATA
+    assert exc.value.status_code == 422
+    assert exc.value.detail == {"missing_fields": ["participant_name"]}
+
+
+def test_registration_rejects_duplicate_field_keys(db):
+    event = _create_registration_event(db)
+    duplicate_values = [
+        SimpleNamespace(field_key="name", value="First"),
+        SimpleNamespace(field_key="name", value="Second"),
+    ]
+
+    with pytest.raises(ActiFlowBusinessException) as exc:
+        SubmissionService.register_event(
+            db=db,
+            event_uuid=event.uuid,
+            user_email="duplicate-fields@example.com",
+            values=duplicate_values,
+        )
+
+    assert exc.value.code == ActiFlowErrorCode.INVALID_SUBMISSION_DATA
+    assert exc.value.status_code == 422
 
 
 def test_registration_creates_email_verification(db):

@@ -30,6 +30,7 @@ from .event.event_schedule import EventSchedule
 from .event.event_staff import EventStaff
 from .event.event_ticket import EventTicket
 from .event.event_category import EventCategory
+from .event.event_view import EventView
 
 # File
 from .file.file import File
@@ -46,6 +47,7 @@ from .organizer.organizer_application import OrganizerApplication
 from .submission.submission import Submission
 from .submission.submission_value import SubmissionValue
 from .submission.submission_file import SubmissionFile
+from .submission.submission_audit import SubmissionAuditLog
 
 # System
 from .system.system_settings import SystemSettings

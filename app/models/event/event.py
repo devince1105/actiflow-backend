@@ -12,6 +12,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    Index,
     String,
     Text,
 )
@@ -49,6 +50,9 @@ class Event(BaseModel, Base):
     - activity_template_uuid：所套用的活動模板
     """
     __tablename__ = "events"
+    __table_args__ = (
+        Index("ix_events_review_queue", "status", "submitted_for_review_at"),
+    )
 
     # ---------------------------------------------------------
     # 業務用活動代號（外部顯示、不變）

@@ -2,9 +2,10 @@
 
 from sqlalchemy.orm import Session
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import secrets
 from uuid import UUID
+from sqlalchemy import func
 
 from app.crud.base.crud_base import CRUDBase
 from app.models.auth.refresh_token import RefreshToken
@@ -35,7 +36,7 @@ class CRUDRefreshToken(CRUDBase[RefreshToken]):
             user_agent=user_agent,
             revoked=False,
             is_deleted=False,
-            expires_at=datetime.utcnow() + timedelta(
+            expires_at=datetime.now(timezone.utc) + timedelta(
                 days=settings.REFRESH_TOKEN_EXPIRE_DAYS
             )
             if hasattr(RefreshToken, "expires_at")
@@ -51,7 +52,7 @@ class CRUDRefreshToken(CRUDBase[RefreshToken]):
         """
         註銷 refresh token（logout / refresh rotation）
         """
-        token.is_revoked = True
+        token.revoked = True
         db.add(token)
         db.commit()
         db.refresh(token)
@@ -75,8 +76,33 @@ class CRUDRefreshToken(CRUDBase[RefreshToken]):
         )
 
         if hasattr(self.model, "expires_at"):
-            q = q.filter(self.model.expires_at > datetime.utcnow())
+            q = q.filter(self.model.expires_at > func.now())
         return q.first()
+
+    def get_by_token(self, db: Session, token: str) -> Optional[RefreshToken]:
+        return db.query(self.model).filter(self.model.token == token).first()
+
+    def rotate(
+        self,
+        db: Session,
+        *,
+        current_token: RefreshToken,
+        user_agent: str,
+    ) -> RefreshToken:
+        current_token.revoked = True
+        replacement = RefreshToken(
+            user_uuid=current_token.user_uuid,
+            token=secrets.token_urlsafe(48),
+            user_agent=user_agent,
+            revoked=False,
+            is_deleted=False,
+            expires_at=datetime.now(timezone.utc)
+            + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        )
+        db.add_all([current_token, replacement])
+        db.commit()
+        db.refresh(replacement)
+        return replacement
 
 
 refresh_token_crud = CRUDRefreshToken(RefreshToken)

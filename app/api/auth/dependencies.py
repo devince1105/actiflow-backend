@@ -52,6 +52,7 @@ def get_current_user(
         db.query(User)
         .filter(
             User.uuid == user_uuid,
+            User.is_active == True,
             User.is_deleted == False,
         )
         .first()

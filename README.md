@@ -217,7 +217,7 @@ venv/bin/python -m pip install -r requirements.txt
 
 ### 2. 設定環境變數
 
-建立 `.env`，至少包含：
+複製 `.env.example` 為 `.env`，再填入環境專用值。至少包含：
 
 ```env
 ENV=dev
@@ -226,6 +226,9 @@ TEST_DATABASE_URL=postgresql://...
 
 JWT_SECRET=replace-with-a-long-random-secret
 COOKIE_SECURE=false
+COOKIE_SAMESITE=lax
+COOKIE_DOMAIN=
+ENABLE_DEBUG_ROUTES=false
 BACKEND_CORS_ORIGINS=http://localhost:3001
 
 FRONTEND_BASE_URL=http://localhost:3001
@@ -243,9 +246,13 @@ R2_PUBLIC_BASE_URL=https://<public-id>.r2.dev
 注意：
 
 - `.env` 不可提交 Git。
+- `ENV` 沒有預設值，必須明確指定 `dev`、`test`、`staging` 或 `prod`。
 - `R2_ENDPOINT_URL` 不要附加 bucket 名稱。
 - `ENV=dev` 時，若設定了 `TEST_DATABASE_URL`，目前程式會優先使用它。
-- 生產環境應使用 `COOKIE_SECURE=true` 與明確的 CORS 網域。
+- staging／production 會拒絕空白或短 JWT secret、非 HTTPS frontend/CORS、
+  `COOKIE_SECURE=false`、萬用 CORS 與啟用 debug route 的設定。
+- 跨站 frontend/backend 若使用 `COOKIE_SAMESITE=none`，必須同時使用
+  `COOKIE_SECURE=true`；同站部署優先使用 `lax`。
 - `SUPER_ADMIN_EMAIL`、`SUPER_ADMIN_PASSWORD` 僅供本機測試帳密管理，不是應用程式啟動必要設定。
 
 ### 測試角色帳號

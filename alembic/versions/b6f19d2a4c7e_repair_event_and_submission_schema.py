@@ -9,7 +9,6 @@ Create Date: 2026-09-14
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
@@ -21,9 +20,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Add fields and enum values expected by the current models."""
-    op.add_column(
-        "events",
-        sa.Column("location", sa.String(length=255), nullable=True),
+    # The enum autocommit block below can leave this DDL committed if a later
+    # migration fails. IF NOT EXISTS makes a deployment retry safe.
+    op.execute(
+        "ALTER TABLE events ADD COLUMN IF NOT EXISTS location VARCHAR(255)"
     )
 
     # PostgreSQL requires enum additions outside the surrounding migration
@@ -42,4 +42,4 @@ def downgrade() -> None:
     PostgreSQL enum values are intentionally retained: removing a value is not
     safe when existing rows may reference it.
     """
-    op.drop_column("events", "location")
+    op.execute("ALTER TABLE events DROP COLUMN IF EXISTS location")

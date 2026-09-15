@@ -94,6 +94,7 @@ Icon
 .env
 *.env
 .env.*
+!.env.example
 .envrc
 
 # ================================
