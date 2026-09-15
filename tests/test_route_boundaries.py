@@ -49,6 +49,13 @@ def test_canonical_organizer_detail_route_is_mounted():
     assert methods["/organizers/{organizer_uuid}"] == {"GET"}
 
 
+def test_canonical_system_health_route_is_mounted_once():
+    methods = _methods_by_path()
+
+    assert methods["/system/health/"] == {"GET"}
+    assert "/system/system/health/" not in methods
+
+
 def test_canonical_organizer_submission_detail_and_actions_are_mounted():
     methods = _methods_by_path()
     base = (

@@ -1,6 +1,12 @@
 # .dockerignore
 venv/
+.venv*/
 __pycache__/
 *.pyc
 .git/
-.env
+.github/
+.pytest_cache/
+.env*
+!.env.example
+tests/
+.DS_Store
