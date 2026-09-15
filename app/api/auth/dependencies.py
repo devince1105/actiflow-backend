@@ -52,6 +52,7 @@ def get_current_user(
         db.query(User)
         .filter(
             User.uuid == user_uuid,
+            User.is_active == True,
             User.is_deleted == False,
         )
         .first()
@@ -64,6 +65,30 @@ def get_current_user(
         )
 
     return build_identity(db, user)
+
+
+def get_current_user_uuid(request: Request) -> str:
+    """Decode only the authenticated user UUID without querying the database.
+
+    Resource-specific dependencies must still verify the user and permission
+    against the database. This avoids building every membership when an API
+    only needs one organizer-scoped membership.
+    """
+    access_token = request.cookies.get("access_token")
+    if not access_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+
+    payload = decode_access_token(access_token)
+    user_uuid = payload.get("sub") if payload else None
+    if not user_uuid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        )
+    return user_uuid
 
 
 def get_current_user_obj(
@@ -117,3 +142,15 @@ def get_current_user_obj(
         )
 
     return user
+
+def get_optional_user(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict | None:
+    """
+    Optional auth dependency.
+    """
+    try:
+        return get_current_user(request, db)
+    except HTTPException:
+        return None

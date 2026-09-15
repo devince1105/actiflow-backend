@@ -17,6 +17,10 @@ def test_auth_login_sets_cookie_and_me_works(client, db: Session):
         email=email,
         password_hash=hash_password(password),
         is_active=True,
+        is_email_verified=True,
+        auth_provider="local",
+        config={},
+        version=1,
     )
     db.add(user)
     db.commit()

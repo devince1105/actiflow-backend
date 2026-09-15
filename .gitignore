@@ -10,6 +10,7 @@ venv/
 .env/
 .env.*
 .venv/
+.venv-test*/
 ENV/
 env/
 pip-wheel-metadata/
@@ -93,6 +94,7 @@ Icon
 .env
 *.env
 .env.*
+!.env.example
 .envrc
 
 # ================================

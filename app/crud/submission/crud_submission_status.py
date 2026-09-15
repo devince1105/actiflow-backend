@@ -3,17 +3,16 @@
 from app.exceptions.submission import InvalidSubmissionStatusTransition
 
 ALLOWED_TRANSITIONS = {
-
     # Public flow
-    "pending": ["email_verified"],
-    "email_verified": ["paid"],
+    "pending": ["email_verified", "expired", "canceled"],
+    "email_verified": ["paid", "canceled", "expired"],
+    "paid": ["completed", "rejected", "canceled"],
 
-    # Organizer decision
-    "paid": ["completed", "rejected"],
-
-    # Organizer reopen (undo decision)
+    # Organizer decision / Cleanup
     "completed": ["paid"],
-    "rejected": ["paid"],
+    "rejected": ["pending"],
+    "expired": ["pending"], # Allow retry/re-verify
+    "canceled": ["pending"], # Allow re-registration
 }
 
 def assert_status_transition(

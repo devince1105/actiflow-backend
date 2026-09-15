@@ -1,12 +1,13 @@
 # app/schemas/submission/submission_response.py
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 from uuid import UUID
+from datetime import datetime
 
 from app.schemas.submission.submission_base import SubmissionBase
 from app.schemas.submission.submission_value import SubmissionValueResponse
-
+from app.models.submission.enums import SubmissionStatus
 
 class SubmissionResponse(SubmissionBase):
     """
@@ -17,12 +18,15 @@ class SubmissionResponse(SubmissionBase):
     """
 
     uuid: UUID
+    submission_code: str
+    status: SubmissionStatus
+    created_at: datetime
 
     # JOIN User 資訊（後台需要）
-    user_name: Optional[str] = None
-    user_email: Optional[str] = None   # 覆蓋 base，是 OK 的（相同欄位 Pydantic 會合併）
+    user_name: Optional[str]
+    user_email: Optional[str]
 
     # 每一筆 submission 對應的欄位值
-    values: List[SubmissionValueResponse] = []
+    values: List[SubmissionValueResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}

@@ -1,14 +1,18 @@
 # app/crud/event/crud_event.py
 
+from sqlalchemy import distinct
 from sqlalchemy.orm import Session
 from uuid import UUID
 
 from app.crud.base.crud_base import CRUDBase
 from app.models.event.event import Event
 
-from app.schemas.event.core.event_create import OrganizerEventCreate
-from app.schemas.event.core.event_update import EventUpdate
-from app.schemas.event.core.event_status_update import EventStatus
+from app.schemas.event.organizer.event_create import OrganizerEventCreate
+from app.schemas.event.organizer.event_update import OrganizerEventUpdate
+from app.core.constants.event_status import EventStatus
+
+from app.api.utils.slug import generate_slug
+from datetime import datetime
 
 from app.crud.activity.crud_activity_template import activity_template_crud
 
@@ -49,6 +53,40 @@ class CRUDEvent(CRUDBase[Event]):
 event_crud = CRUDEvent(Event)
 
 
+def list_public_event_categories(self, db: Session):
+    """
+    從已發布活動中，整理出實際使用的分類
+    """
+    rows = (
+        db.query(distinct(Event.config["category"]))
+        .filter(Event.status == "published")
+        .filter(Event.is_deleted == False)
+        .all()
+    )
+
+    categories = []
+    seen = set()
+
+    for (cat,) in rows:
+        if not cat:
+            continue
+
+        slug = cat.get("slug")
+        if not slug or slug in seen:
+            continue
+
+        seen.add(slug)
+        categories.append({
+            "code": cat.get("code"),
+            "slug": slug,
+            "label": cat.get("label"),
+            "color": cat.get("color"),
+            "icon": cat.get("icon"),
+        })
+
+    return categories
+
+
 # ============================================================
 # Organizer scoped business logic
 # ============================================================
@@ -68,20 +106,27 @@ def create_event_by_organizer(
     # --------------------------------------------------------
     # 1. 驗證 ActivityTemplate 是否屬於該 organizer
     # --------------------------------------------------------
-    template = activity_template_crud.get(db, data.activity_template_uuid)
+    # template = activity_template_crud.get(db, data.activity_template_uuid)
 
-    if not template or template.organizer_uuid != organizer_uuid:
-        #  這裡不丟 HTTPException（API 層處理）
-        raise ValueError("Invalid activity template")
+    # if not template or template.organizer_uuid != organizer_uuid:
+    #     #  這裡不丟 HTTPException（API 層處理）
+    #     raise ValueError("Invalid activity template")
 
     # --------------------------------------------------------
     # 2. 組合建立資料
     # --------------------------------------------------------
-    obj = data.model_dump()
+    title_for_slug = data.name or data.title
+    if not title_for_slug:
+        raise ValueError("Event name/title is required to generate slug")
+
+    obj = data.model_dump(exclude_none=True)
     obj.update(
         {
             "organizer_uuid": organizer_uuid,
-            "event_code": f"EV-{str(creator_uuid)[:8]}",  # 暫時簡單生成
+            "slug": generate_slug(title_for_slug),
+            "event_code": f"EV-{datetime.utcnow():%Y%m%d%H%M%S}",
+            #"event_code": f"EV-{str(creator_uuid)[:8]}",  # 暫時簡單生成
+            "status": EventStatus.DRAFT,
             "created_by": creator_uuid,
             "created_by_role": creator_role,
         }
@@ -92,6 +137,52 @@ def create_event_by_organizer(
     # --------------------------------------------------------
     return event_crud.create(db, obj)
 
+
+def update_event_by_organizer(
+    db: Session,
+    event_uuid: UUID,
+    data: OrganizerEventUpdate,
+    updater_uuid: UUID,
+    updater_role: str,
+) -> Event | None:
+    event = event_crud.get_event_by_uuid(db, event_uuid)
+    if not event or event.is_deleted:
+        return None
+
+    update_data = data.model_dump(exclude_unset=True)
+
+    # --------------------------------------------------------
+    # 1. 前端相容欄位 → Domain 欄位收斂
+    # --------------------------------------------------------
+    if "title" in update_data and "name" not in update_data:
+        update_data["name"] = update_data.pop("title")
+
+    if "event_start_at" in update_data:
+        update_data["start_date"] = update_data.pop("event_start_at")
+
+    if "event_end_at" in update_data:
+        update_data["end_date"] = update_data.pop("event_end_at")
+
+    if "registration_end_at" in update_data:
+        update_data["registration_deadline"] = update_data.pop("registration_end_at")
+
+    # --------------------------------------------------------
+    # 2. 若名稱被修改 → 重新產生 slug
+    # --------------------------------------------------------
+    if "name" in update_data and update_data["name"]:
+        update_data["slug"] = generate_slug(update_data["name"])
+
+    # --------------------------------------------------------
+    # 3. 注入 audit 欄位
+    # --------------------------------------------------------
+    update_data.update(
+        {
+            "updated_by": updater_uuid,
+            "updated_by_role": updater_role,
+        }
+    )
+
+    return event_crud.update(db, db_obj=event, obj_in=update_data)
 
 
 # ============================================================
@@ -105,27 +196,6 @@ def get_event_by_uuid(db: Session, event_uuid: UUID):
 def list_events_by_organizer(db: Session, organizer_uuid: UUID):
     return event_crud.list_events_by_organizer(db, organizer_uuid)
 
-
-def update_event_by_organizer(
-    db: Session,
-    event_uuid: UUID,
-    data: EventUpdate,
-    updater_uuid: UUID,
-    updater_role: str,
-):
-    event = event_crud.get_event_by_uuid(db, event_uuid)
-    if not event or event.is_deleted:
-        return None
-
-    update_data = data.model_dump(exclude_unset=True)
-    update_data.update(
-        {
-            "updated_by": updater_uuid,
-            "updated_by_role": updater_role,
-        }
-    )
-
-    return event_crud.update(db, db_obj=event, obj_in=update_data)
 
 
 def soft_delete_event_by_organizer(

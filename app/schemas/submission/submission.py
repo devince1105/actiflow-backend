@@ -1,6 +1,6 @@
 # app/schemas/submission/submission.py
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, Dict, Any, List
 from uuid import UUID
 from datetime import datetime
@@ -21,7 +21,7 @@ class SubmissionBase(BaseModel):
 
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
-    extra_data: Dict[str, Any] = {}
+    extra_data: Dict[str, Any] = Field(default_factory=dict)
 
     is_active: bool = True
     is_deleted: bool = False
@@ -90,5 +90,4 @@ class SubmissionStatusUpdate(BaseModel):
 class SubmissionResponse(SubmissionBase):
     uuid: UUID
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)

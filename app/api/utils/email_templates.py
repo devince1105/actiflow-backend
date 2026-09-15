@@ -3,6 +3,8 @@
 # ============================================================
 # Verification Email
 # ============================================================
+from html import escape
+
 
 def verification_email_html(verify_url: str) -> str:
     return f"""
@@ -17,20 +19,15 @@ def verification_email_html(verify_url: str) -> str:
 def submission_completed_email(
     *,
     project_name: str,
+    event_name: str,
+    submission_code: str,
 ) -> tuple[str, str]:
-    subject = f"【{project_name}】報名已通過確認"
+    subject = f"【{project_name}】{event_name} 報名已通過"
 
-    body = f"""
-您好，
-
-恭喜您，您報名的活動已通過主辦單位審核，
-報名流程已完成。
-
-活動相關資訊請留意後續通知，
-或登入系統查看詳情。
-
-感謝您的參與！
-"""
+    body = f"""<p>您好，</p>
+<p>您報名的「{escape(event_name)}」已通過主辦單位審核。</p>
+<p>報名編號：<strong>{escape(submission_code)}</strong></p>
+<p>請登入 ActiFlow 查看活動資訊。</p>"""
     return subject, body
 
 
@@ -41,22 +38,15 @@ def submission_completed_email(
 def submission_rejected_email(
     *,
     project_name: str,
+    event_name: str,
+    submission_code: str,
     reason: str,
 ) -> tuple[str, str]:
-    subject = f"【{project_name}】報名未通過通知"
-
-    body = f"""
-您好，
-
-很抱歉通知您，您報名的活動未能通過審核。
-
-原因：
-{reason}
-
-若您有任何疑問，請聯絡主辦單位。
-
-謝謝您的理解。
-"""
+    subject = f"【{project_name}】{event_name} 報名未通過"
+    body = f"""<p>您好，</p>
+<p>您報名的「{escape(event_name)}」未能通過審核。</p>
+<p>報名編號：<strong>{escape(submission_code)}</strong></p>
+<p>原因：{escape(reason)}</p>"""
     return subject, body
 
 # ============================================================
@@ -66,22 +56,36 @@ def submission_rejected_email(
 def submission_reopened_email(
     *,
     project_name: str,
+    event_name: str,
+    submission_code: str,
     note: str,
 ) -> tuple[str, str]:
-    subject = f"【{project_name}】報名已重新開啟"
-
-    body = f"""
-您好，
-
-您先前的活動報名已被主辦單位重新開啟。
-
-說明：
-{note}
-
-目前狀態：待確認 / 待處理
-
-請登入系統查看詳情。
-
-謝謝。
-"""
+    subject = f"【{project_name}】{event_name} 報名已重新開啟"
+    body = f"""<p>您好，</p>
+<p>「{escape(event_name)}」的報名已重新開啟。</p>
+<p>報名編號：<strong>{escape(submission_code)}</strong></p>
+<p>說明：{escape(note)}</p>"""
     return subject, body
+
+
+def submission_email_verified_email(
+    *, project_name: str, event_name: str, submission_code: str
+) -> tuple[str, str]:
+    return (
+        f"【{project_name}】{event_name} 報名確認完成",
+        f"""<p>您的 Email 已完成驗證。</p>
+<p>活動：{escape(event_name)}</p>
+<p>報名編號：<strong>{escape(submission_code)}</strong></p>
+<p>主辦單位將依活動流程處理您的報名。</p>""",
+    )
+
+
+def submission_canceled_email(
+    *, project_name: str, event_name: str, submission_code: str
+) -> tuple[str, str]:
+    return (
+        f"【{project_name}】{event_name} 報名已取消",
+        f"""<p>您的活動報名已取消。</p>
+<p>活動：{escape(event_name)}</p>
+<p>報名編號：<strong>{escape(submission_code)}</strong></p>""",
+    )

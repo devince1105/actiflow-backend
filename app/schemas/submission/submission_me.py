@@ -13,6 +13,9 @@ class MeSubmissionEvent(BaseModel):
     uuid: UUID
     slug: str
     name: str
+    start_date: datetime
+    end_date: Optional[datetime] = None
+    location: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

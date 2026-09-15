@@ -1,6 +1,6 @@
 # app/schemas/user/user_base.py
 
-from pydantic import BaseModel, EmailStr, HttpUrl
+from pydantic import BaseModel, ConfigDict, EmailStr
 from typing import Optional, Dict, Any
 from datetime import date
 
@@ -13,7 +13,7 @@ class UserBase(BaseModel):
     email: Optional[EmailStr] = None
     name: Optional[str] = None
     phone: Optional[str] = None
-    avatar_url: Optional[HttpUrl] = None
+    avatar_url: Optional[str] = None
 
     birthday: Optional[date] = None
     address: Optional[Dict[str, Any]] = None
@@ -22,5 +22,4 @@ class UserBase(BaseModel):
     job_title: Optional[str] = None
     blood_type: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

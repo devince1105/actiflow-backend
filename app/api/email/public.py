@@ -98,8 +98,13 @@ def verify_email(
                 status_code=400,
                 detail="Related submission not found",
             )
-        # Email 已驗證，但 submission 狀態不動
-        # submission.status = "email_verified"
+
+        # ✅ 推進 submission 狀態
+        submission.status = "email_verified"
+        submission.updated_at = now
+        
+        db.commit()
+        db.refresh(submission)
 
     else:
         raise HTTPException(

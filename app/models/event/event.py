@@ -12,6 +12,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    Index,
     String,
     Text,
 )
@@ -20,10 +21,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 from app.models.base.base_model import BaseModel
+
 # ---------------------------------------------------------
 if TYPE_CHECKING:
     from app.models.organizer.organizer import Organizer
     from app.models.activity.activity_template import ActivityTemplate
+    from app.models.event.event_category import EventCategory
     from app.models.event.event_price import EventPrice
     from app.models.event.event_field import EventField
     from app.models.event.event_price import EventPrice
@@ -35,6 +38,7 @@ if TYPE_CHECKING:
     from app.models.event.event_report import EventReportCache
     from app.models.event.event_ticket import EventTicket
     from app.models.submission.submission import Submission
+
 # ---------------------------------------------------------
 
 class Event(BaseModel, Base):
@@ -46,6 +50,9 @@ class Event(BaseModel, Base):
     - activity_template_uuid：所套用的活動模板
     """
     __tablename__ = "events"
+    __table_args__ = (
+        Index("ix_events_review_queue", "status", "submitted_for_review_at"),
+    )
 
     # ---------------------------------------------------------
     # 業務用活動代號（外部顯示、不變）
@@ -63,6 +70,36 @@ class Event(BaseModel, Base):
         nullable=False,
         default="draft",
         index=True,
+    )
+
+    # ---------------------------------------------------------
+    # 容量與報名控制 (Atomic Control)
+    # ---------------------------------------------------------
+    max_capacity: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=100,  # MVP 預設 100
+    )
+
+    current_attendance: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+    # ---------------------------------------------------------
+    # 外鍵：活動分類
+    # ---------------------------------------------------------
+    event_category_uuid: Mapped[PyUUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("event_categories.uuid", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+
+    event_category: Mapped["EventCategory"] = relationship(
+        "EventCategory",
+        back_populates="events",
+        lazy="selectin",
     )
 
     # ---------------------------------------------------------
@@ -97,17 +134,50 @@ class Event(BaseModel, Base):
     # ---------------------------------------------------------
     # 活動基本資訊
     # ---------------------------------------------------------
+    # ✅ 活動名稱
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # ✅ 活動代號（外部顯示、不變）
+    slug: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
+    
+    # 短摘要 / 舊版介紹（保留）
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # ✅ 活動頁內容（Block-based，可組合）
+    content: Mapped[Optional[dict]] = mapped_column(
+        JSONB,
+        nullable=True,
+        default=dict,
+    )
+
+    # ✅ 活動時間
     start_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     end_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    
+    # 活動地點
+    location: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # 報名截止日
     registration_deadline: Mapped[Optional[datetime]] = mapped_column(
         DateTime,
         nullable=True,
     )
+
+    submitted_for_review_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reviewer_uuid: Mapped[Optional[PyUUID]] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True
+    )
+    review_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # 活動其他設定
     config: Mapped[Optional[dict]] = mapped_column(
@@ -190,6 +260,3 @@ class Event(BaseModel, Base):
         lazy="selectin",
         cascade="all, delete-orphan",
     )
-
-
-    

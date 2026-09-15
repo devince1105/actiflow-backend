@@ -8,6 +8,12 @@ from app.core.db import get_db
 from app.core.security import verify_password
 from app.core.jwt import create_access_token
 from app.core.config import settings
+from app.core.exceptions import ActiFlowBusinessException, ActiFlowErrorCode
+from app.api.auth.cookies import (
+    ACCESS_COOKIE,
+    REFRESH_COOKIE,
+    set_auth_cookie,
+)
 
 from app.crud.user.crud_user import user_crud
 from app.crud.user.crud_refresh_token import refresh_token_crud
@@ -42,12 +48,19 @@ def unified_login(
     user = user_crud.get_by_email(db, data.email)
 
     # ⚠️ 不暴露帳號是否存在
-    if not user or not user.password_hash:
+    if not user or not user.password_hash or not user.is_active:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # 2. 驗證密碼
     if not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if not user.is_email_verified:
+        raise ActiFlowBusinessException(
+            code=ActiFlowErrorCode.EMAIL_NOT_VERIFIED,
+            message="請先完成 Email 驗證",
+            status_code=403,
+        )
 
     # 3. 建立 Access Token（只放 identity）
     access_token = create_access_token({
@@ -63,22 +76,18 @@ def unified_login(
     )
 
     # 5. 寫入 Cookie
-    response.set_cookie(
-        key="access_token",
+    set_auth_cookie(
+        response,
+        key=ACCESS_COOKIE,
         value=access_token,
-        httponly=True,
-        secure=settings.COOKIE_SECURE,
-        samesite="lax",
-        max_age=60 * 15,
+        max_age=60 * settings.ACCESS_TOKEN_EXPIRE_MINUTES,
     )
 
-    response.set_cookie(
-        key="refresh_token",
+    set_auth_cookie(
+        response,
+        key=REFRESH_COOKIE,
         value=refresh_token_obj.token,
-        httponly=True,
-        secure=settings.COOKIE_SECURE,
-        samesite="lax",
-        max_age=60 * 60 * 24 * 30,
+        max_age=60 * 60 * 24 * settings.REFRESH_TOKEN_EXPIRE_DAYS,
     )
 
     # 6. 回傳登入成功（不含 token）
@@ -89,4 +98,3 @@ def unified_login(
             "email": user.email,
         },
     }
-

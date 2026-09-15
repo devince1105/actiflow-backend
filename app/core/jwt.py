@@ -9,13 +9,14 @@ import uuid
 ALGORITHM = settings.ALGORITHM
 
 
-def create_access_token(data: dict, expires_minutes: int = 60):
+def create_access_token(data: dict, expires_minutes: int | None = None):
     """
     建立 JWT Access Token（支援 exp / iat / jti）
     """
     to_encode = data.copy()
 
-    expire = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
+    lifetime = expires_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    expire = datetime.now(timezone.utc) + timedelta(minutes=lifetime)
     issued_at = datetime.now(timezone.utc)
 
     to_encode.update({

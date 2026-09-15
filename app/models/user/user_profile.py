@@ -4,11 +4,12 @@
 # Standard Model Header (SQLAlchemy 2.0)
 # ---------------------------------------------------------
 from typing import List, Optional, TYPE_CHECKING
-from datetime import datetime
+from datetime import date
 from uuid import UUID as PyUUID
 
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -41,8 +42,8 @@ class UserProfile(BaseModel, Base):
     # ---------------------------------------------------------
     # Profile fields
     # ---------------------------------------------------------
-    birthday: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True),
+    birthday: Mapped[Optional[date]] = mapped_column(
+        Date,
         nullable=True,
     )
 

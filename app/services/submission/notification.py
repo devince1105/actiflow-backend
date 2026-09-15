@@ -1,112 +1,94 @@
-# app/services/submission/notification.py
+import logging
 
-from sqlalchemy.orm import Session
-
-from app.models.submission.submission import Submission
 from app.api.utils.email_mailer import send_generic_email
 from app.api.utils.email_templates import (
+    submission_canceled_email,
+    submission_completed_email,
+    submission_email_verified_email,
     submission_rejected_email,
     submission_reopened_email,
-    submission_completed_email,
 )
 from app.core.config import settings
+from app.models.submission.submission import Submission
 
 
-# ============================================================
-# Submission Notification Service
-# ============================================================
-# 責任：
-# - 處理 submission 狀態變更後的 email side effects
-# - 不修改狀態
-# - 不處理權限
-# - 不拋 HTTP exception
-# ============================================================
+logger = logging.getLogger("actiflow.submission.notifications")
 
-# ============================================================
-# Submission Rejected Notification
-# ============================================================
-def notify_submission_rejected(
-    *,
-    db: Session,
+
+def send_submission_status_notification(
     submission: Submission,
-):
-    """
-    Notify applicant that submission is rejected.
-
-    使用時機：
-    - Organizer reject submission
-    """
-
-    if not submission.user_email:
-        return
-
-    subject, body = submission_rejected_email(
-        project_name=settings.PROJECT_NAME,
-        reason=submission.status_reason or "未提供具體原因",
+    target_status: str,
+) -> None:
+    """Send a committed status notification without affecting the transaction."""
+    send_submission_status_email(
+        email=submission.user_email,
+        event_name=submission.event.name,
+        submission_code=submission.submission_code,
+        target_status=target_status,
+        reason=submission.status_reason,
+        submission_uuid=str(submission.uuid),
     )
 
-    send_generic_email(
-        to_email=submission.user_email,
-        subject=subject,
-        html=body,
-    )
 
-# ============================================================
-# Submission Reopened Notification
-# ============================================================
-
-def notify_submission_reopened(
+def send_submission_status_email(
     *,
-    db: Session,
-    submission: Submission,
-):
-    """
-    Notify applicant that submission is reopened.
+    email: str,
+    event_name: str,
+    submission_code: str,
+    target_status: str,
+    reason: str | None = None,
+    submission_uuid: str | None = None,
+) -> None:
+    try:
+        if not email:
+            return
+        common = {
+            "project_name": getattr(settings, "PROJECT_NAME", "ActiFlow"),
+            "event_name": event_name,
+            "submission_code": submission_code,
+        }
+        if target_status == "email_verified":
+            subject, body = submission_email_verified_email(**common)
+        elif target_status == "completed":
+            subject, body = submission_completed_email(**common)
+        elif target_status == "rejected":
+            subject, body = submission_rejected_email(
+                **common,
+                reason=reason or "未提供具體原因",
+            )
+        elif target_status == "canceled":
+            subject, body = submission_canceled_email(**common)
+        elif target_status == "pending":
+            subject, body = submission_reopened_email(
+                **common,
+                note=reason or "請登入系統查看最新狀態",
+            )
+        else:
+            return
 
-    使用時機：
-    - Organizer reopen submission
-    """
-
-    if not submission.user_email:
-        return
-
-    subject, body = submission_reopened_email(
-        project_name=settings.PROJECT_NAME,
-        note=submission.notes or "請登入系統查看最新狀態",
-    )
-
-    send_generic_email(
-        to_email=submission.user_email,
-        subject=subject,
-        html=body,
-    )
+        send_generic_email(
+            to_email=email,
+            subject=subject,
+            html=body,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to send submission status notification",
+            extra={
+                "submission_uuid": submission_uuid,
+                "target_status": target_status,
+            },
+        )
 
 
-# ============================================================
-# Submission Approved Notification
-# ============================================================
+# Compatibility wrappers for legacy command routes.
+def notify_submission_rejected(*, db, submission: Submission) -> None:
+    send_submission_status_notification(submission, "rejected")
 
-def notify_submission_completed(
-    *,
-    db: Session,
-    submission: Submission,
-):
-    """
-    Notify applicant that submission is approved (completed).
 
-    使用時機：
-    - Organizer approve submission
-    """
+def notify_submission_reopened(*, db, submission: Submission) -> None:
+    send_submission_status_notification(submission, "pending")
 
-    if not submission.user_email:
-        return
 
-    subject, body = submission_completed_email(
-        project_name=settings.PROJECT_NAME,
-    )
-
-    send_generic_email(
-        to_email=submission.user_email,
-        subject=subject,
-        html=body,
-    )
+def notify_submission_completed(*, db, submission: Submission) -> None:
+    send_submission_status_notification(submission, "completed")

@@ -12,7 +12,7 @@ class UserUpdate(BaseModel):
 
     name: Optional[str] = None
     phone: Optional[str] = None
-    avatar_url: Optional[HttpUrl] = None
+    avatar_url: Optional[str] = None
 
     birthday: Optional[date] = None
     address: Optional[Dict[str, Any]] = None

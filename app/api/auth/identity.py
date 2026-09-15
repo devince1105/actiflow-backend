@@ -6,6 +6,7 @@ from app.models.user.user import User
 from app.models.membership.system_membership import SystemMembership
 from app.models.membership.organizer_membership import OrganizerMembership
 from app.models.organizer.organizer import Organizer
+from app.core.roles import ACTIVE_ORGANIZER_ROLES
 
 
 def build_identity(db: Session, user: User) -> dict:
@@ -46,7 +47,10 @@ def build_identity(db: Session, user: User) -> dict:
             OrganizerMembership.user_uuid == user.uuid,
             OrganizerMembership.is_deleted == False,
             OrganizerMembership.is_active == True,
+            OrganizerMembership.is_suspended == False,
+            OrganizerMembership.role.in_(ACTIVE_ORGANIZER_ROLES),
             Organizer.is_deleted == False,
+            Organizer.is_active == True,
         )
         .all()
     )

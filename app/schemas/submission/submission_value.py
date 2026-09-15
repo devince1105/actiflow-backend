@@ -1,6 +1,6 @@
 # app/schemas/submission/submission_value.py
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Any, Optional
 from uuid import UUID
 
@@ -11,6 +11,7 @@ from uuid import UUID
 class SubmissionValueBase(BaseModel):
     field_uuid: UUID                  # 對應 EventField.uuid
     field_type: str                   # text / number / select / checkbox / date / file ...
+    field_label: Optional[str] = None # 活動欄位標題 (Name / Email / 專長...)
     value: Any                        # 真正的欄位值
     uploaded_file: Optional[str] = None  # Upload 類型欄位會用到
 
@@ -52,5 +53,9 @@ class SubmissionValueResponse(SubmissionValueBase):
 # Public Create (前台 /me/submissions 顯示)
 # ------------------------------------------------------------
 class SubmissionValuePublicCreate(BaseModel):
-    field_key: str
+    field_key: str = Field(
+        min_length=1,
+        max_length=100,
+        pattern=r"^[a-z][a-z0-9_]*$",
+    )
     value: Any

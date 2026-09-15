@@ -38,7 +38,13 @@ rejected        → paid        (reopen)
 | --- | --- | --- | --- |
 | POST /public/events/{event_uuid}/submissions | — → pending | Public | ❌ |
 | POST /public/events/submissions/{uuid}/confirm-email | pending → email_verified | Public | ❌ |
-| POST /public/events/submissions/{uuid}/mark-paid | email_verified → paid | Public | ❌ |
+
+公開報名入口以「活動 + Client IP」限制每分鐘嘗試次數。目前限制器為
+單一應用程序內的保護；多 worker 或多 instance 部署前，應改用 Redis
+等共享儲存，避免各 instance 各自計數。
+
+付款狀態不可由公開 API 變更；未來應由具備簽章驗證與冪等處理的付款
+webhook 推進 `email_verified → paid`。
 
 ### 3.2 Organizer Flow（主辦單位）
 
@@ -119,5 +125,3 @@ app/api/utils/email_mailer.py
 - ✅ Organizer 操作具備可逆性（reopen）
 
 - ✅ Email 不寫死在 API
-
-

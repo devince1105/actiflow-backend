@@ -8,7 +8,7 @@ from uuid import UUID
 from app.core.db import get_db
 from app.core.rbac import require_organizer_role
 
-from app.schemas.event.core.event_list_item import OrganizerEventListItem
+from app.schemas.event.organizer.event_list_item import EventListItem
 from app.models.event.event import Event
 
 
@@ -20,7 +20,7 @@ router = APIRouter(
 
 @router.get(
     "",
-    response_model=list[OrganizerEventListItem],
+    response_model=list[EventListItem],
     dependencies=[Depends(require_organizer_role(["owner", "admin"]))],
 )
 def list_organizer_events(
@@ -45,11 +45,11 @@ def list_organizer_events(
         .all()
     )
 
-    items: list[OrganizerEventListItem] = []
+    items: list[EventListItem] = []
 
     for event in events:
         items.append(
-            OrganizerEventListItem(
+            EventListItem(
                 uuid=event.uuid,
                 event_code=event.event_code,   # ✅ 補齊（若實際欄位不同請對應）
                 name=event.name,               # ✅ 用 schema 定義的 name

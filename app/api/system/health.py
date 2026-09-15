@@ -3,7 +3,7 @@
 from fastapi import APIRouter
 
 router = APIRouter(
-    prefix="/system/health",
+    prefix="/health",
     tags=["System - Health"],
 )
 
