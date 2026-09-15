@@ -1,6 +1,6 @@
 # app/schemas/submission/submission_value.py
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Any, Optional
 from uuid import UUID
 
@@ -53,5 +53,9 @@ class SubmissionValueResponse(SubmissionValueBase):
 # Public Create (前台 /me/submissions 顯示)
 # ------------------------------------------------------------
 class SubmissionValuePublicCreate(BaseModel):
-    field_key: str
+    field_key: str = Field(
+        min_length=1,
+        max_length=100,
+        pattern=r"^[a-z][a-z0-9_]*$",
+    )
     value: Any

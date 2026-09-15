@@ -15,6 +15,7 @@ from app.models.event.event_field import EventField
 from app.models.organizer.organizer import Organizer
 from app.models.submission.submission import Submission
 from app.models.submission.submission_audit import SubmissionAuditLog
+from app.models.submission.submission_value import SubmissionValue
 from app.services.submission.submission_service import SubmissionService
 from app.api.utils.submission_code import generate_submission_code
 
@@ -161,6 +162,37 @@ def _register(db, event: Event, email: str) -> Submission:
     )
 
 
+def _add_event_field(
+    db,
+    event: Event,
+    *,
+    field_key: str,
+    field_type: str = "text",
+    required: bool = False,
+    options: list | None = None,
+    validation: dict | None = None,
+    is_active: bool = True,
+    is_enabled: bool = True,
+    sort_order: int = 0,
+) -> EventField:
+    field = EventField(
+        event_uuid=event.uuid,
+        field_key=field_key,
+        label=field_key.replace("_", " ").title(),
+        field_type=field_type,
+        required=required,
+        sort_order=sort_order,
+        options=options or [],
+        config={},
+        validation=validation or {},
+        is_active=is_active,
+        is_enabled=is_enabled,
+    )
+    db.add(field)
+    db.commit()
+    return field
+
+
 def test_capacity_is_enforced_when_a_competing_registration_saw_a_stale_slot(db):
     event = _create_registration_event(db, capacity=1)
     first = _register(db, event, "capacity-first@example.com")
@@ -229,6 +261,27 @@ def test_registration_requires_configured_required_fields(db):
     assert exc.value.detail == {"missing_fields": ["participant_name"]}
 
 
+def test_registration_requires_required_boolean_checkbox_to_be_checked(db):
+    event = _create_registration_event(db)
+    field = _add_event_field(
+        db,
+        event,
+        field_key="terms_accepted",
+        field_type="checkbox",
+        required=True,
+    )
+
+    with pytest.raises(ActiFlowBusinessException) as exc:
+        SubmissionService.register_event(
+            db=db,
+            event_uuid=event.uuid,
+            user_email="unchecked-required@example.com",
+            values=[SimpleNamespace(field_key=field.field_key, value=False)],
+        )
+
+    assert exc.value.detail == {"missing_fields": [field.field_key]}
+
+
 def test_registration_rejects_duplicate_field_keys(db):
     event = _create_registration_event(db)
     duplicate_values = [
@@ -246,6 +299,161 @@ def test_registration_rejects_duplicate_field_keys(db):
 
     assert exc.value.code == ActiFlowErrorCode.INVALID_SUBMISSION_DATA
     assert exc.value.status_code == 422
+
+
+def test_registration_rejects_unknown_or_disabled_fields(db):
+    event = _create_registration_event(db)
+    _add_event_field(
+        db,
+        event,
+        field_key="disabled_field",
+        is_enabled=False,
+    )
+
+    for field_key in ("unknown_field", "disabled_field"):
+        with pytest.raises(ActiFlowBusinessException) as exc:
+            SubmissionService.register_event(
+                db=db,
+                event_uuid=event.uuid,
+                user_email=f"{field_key}@example.com",
+                values=[SimpleNamespace(field_key=field_key, value="value")],
+            )
+
+        assert exc.value.code == ActiFlowErrorCode.INVALID_SUBMISSION_DATA
+        assert exc.value.detail == {"unknown_fields": [field_key]}
+
+
+@pytest.mark.parametrize(
+    ("field_type", "options", "value", "reason"),
+    [
+        ("email", [], "not-an-email", "invalid_email"),
+        ("date", [], "2026-99-99", "invalid_date"),
+        ("number", [], "not-a-number", "must_be_number"),
+        ("select", ["A", "B"], "C", "invalid_option"),
+        ("radio", [{"label": "A", "value": "a"}], "A", "invalid_option"),
+        ("checkbox", ["A", "B"], ["A", "C"], "invalid_option"),
+    ],
+)
+def test_registration_validates_field_types_and_options(
+    db,
+    field_type,
+    options,
+    value,
+    reason,
+):
+    event = _create_registration_event(db)
+    field = _add_event_field(
+        db,
+        event,
+        field_key="contract_field",
+        field_type=field_type,
+        options=options,
+    )
+
+    with pytest.raises(ActiFlowBusinessException) as exc:
+        SubmissionService.register_event(
+            db=db,
+            event_uuid=event.uuid,
+            user_email=f"invalid-{uuid4().hex}@example.com",
+            values=[SimpleNamespace(field_key=field.field_key, value=value)],
+        )
+
+    assert exc.value.detail == {
+        "field_key": field.field_key,
+        "reason": reason,
+    }
+
+
+def test_registration_enforces_length_and_number_bounds(db):
+    event = _create_registration_event(db)
+    text_field = _add_event_field(
+        db,
+        event,
+        field_key="short_text",
+        validation={"min_length": 2, "max_length": 4},
+    )
+    number_field = _add_event_field(
+        db,
+        event,
+        field_key="age",
+        field_type="number",
+        validation={"min": 18, "max": 120},
+    )
+
+    for field, value, reason in (
+        (text_field, "x", "too_short"),
+        (text_field, "12345", "too_long"),
+        (number_field, 17, "outside_min"),
+        (number_field, 121, "outside_max"),
+    ):
+        with pytest.raises(ActiFlowBusinessException) as exc:
+            SubmissionService._validate_field_value(field, value)
+        assert exc.value.detail["reason"] == reason
+
+
+def test_valid_dynamic_field_value_is_persisted(db):
+    event = _create_registration_event(db)
+    field = _add_event_field(
+        db,
+        event,
+        field_key="category",
+        field_type="select",
+        required=True,
+        options=["Landscape", "Portrait"],
+    )
+
+    submission = SubmissionService.register_event(
+        db=db,
+        event_uuid=event.uuid,
+        user_email="valid-contract@example.com",
+        values=[SimpleNamespace(field_key="category", value="Landscape")],
+    )
+    stored_value = (
+        db.query(SubmissionValue)
+        .filter(SubmissionValue.submission_uuid == submission.uuid)
+        .one()
+    )
+
+    assert stored_value.event_field_uuid == field.uuid
+    assert stored_value.field_key == "category"
+    assert stored_value.value == "Landscape"
+
+
+def test_public_event_detail_exposes_only_enabled_fields_in_order(client, db):
+    event = _create_registration_event(db)
+    _add_event_field(
+        db,
+        event,
+        field_key="second_field",
+        sort_order=20,
+        validation={"max_length": 20},
+    )
+    _add_event_field(
+        db,
+        event,
+        field_key="first_field",
+        field_type="select",
+        options=["A", "B"],
+        sort_order=10,
+    )
+    _add_event_field(
+        db,
+        event,
+        field_key="hidden_field",
+        is_active=False,
+        sort_order=0,
+    )
+
+    response = client.get(f"/public/event-detail/{event.event_code}")
+
+    assert response.status_code == 200
+    fields = response.json()["fields"]
+    assert [field["field_key"] for field in fields] == [
+        "first_field",
+        "second_field",
+    ]
+    assert fields[0]["options"] == ["A", "B"]
+    assert fields[1]["validation"] == {"max_length": 20}
 
 
 def test_registration_creates_email_verification(db):

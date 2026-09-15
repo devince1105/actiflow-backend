@@ -16,6 +16,7 @@ from app.schemas.event.public.event_detail import (
     EventLocationPublic,
     EventContentPublic,
     EventContentBlockPublic,
+    EventRegistrationFieldPublic,
 )
 from app.schemas.organizer.public.organizer_public import OrganizerPublic
 from app.schemas.event.category.event_category_public import EventCategoryPublic
@@ -43,10 +44,12 @@ def get_public_event_detail_by_code(
             selectinload(Event.media),
             selectinload(Event.organizer),
             selectinload(Event.event_category),
+            selectinload(Event.fields),
         )
         .filter(
             Event.event_code == event_code,
             Event.status == EventStatus.PUBLISHED,
+            Event.is_active == True,
             Event.is_deleted == False,
         )
         .first()
@@ -122,6 +125,28 @@ def get_public_event_detail_by_code(
                 )
     content = EventContentPublic(blocks=content_blocks) if content_blocks else None
 
+    fields = [
+        EventRegistrationFieldPublic(
+            uuid=str(field.uuid),
+            field_key=field.field_key,
+            label=field.label,
+            placeholder=field.placeholder,
+            description=field.description,
+            field_type=field.field_type,
+            required=field.required,
+            options=field.options if isinstance(field.options, list) else [],
+            validation=(
+                field.validation if isinstance(field.validation, dict) else {}
+            ),
+            sort_order=field.sort_order,
+        )
+        for field in sorted(
+            event.fields,
+            key=lambda item: (item.sort_order, item.field_key),
+        )
+        if field.is_active and field.is_enabled and not field.is_deleted
+    ]
+
     # 7. Response
     return EventDetailPublic(
         uuid=str(event.uuid),
@@ -135,6 +160,7 @@ def get_public_event_detail_by_code(
         organizer=organizer,
         registration_deadline=as_utc(event.registration_deadline),
         content=content,
+        fields=fields,
         max_capacity=event.max_capacity,
         current_attendance=event.current_attendance,
         extra=event.config or {},

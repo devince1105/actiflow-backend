@@ -1,12 +1,15 @@
 # app/services/submission/submission_service.py
 
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
+from decimal import Decimal, InvalidOperation
 from uuid import UUID, uuid4
 from sqlalchemy.orm import Session
 from sqlalchemy import func, update, select
 from sqlalchemy.exc import IntegrityError
 from fastapi import BackgroundTasks
 import logging
+from typing import NoReturn
+from email_validator import EmailNotValidError, validate_email
 
 from app.core.exceptions import ActiFlowBusinessException, ActiFlowErrorCode
 from app.models.event.event import Event
@@ -28,6 +31,19 @@ logger = logging.getLogger("actiflow.submission")
 
 class SubmissionService:
     CAPACITY_STATUSES = {"pending", "email_verified", "paid", "completed"}
+    SUPPORTED_FIELD_TYPES = {
+        "text",
+        "textarea",
+        "email",
+        "tel",
+        "number",
+        "select",
+        "radio",
+        "checkbox",
+        "date",
+    }
+    MAX_TEXT_LENGTH = 10_000
+    MAX_CHECKBOX_VALUES = 100
 
     @staticmethod
     def can_register(event: Event, user_email: str = None) -> bool:
@@ -83,6 +99,10 @@ class SubmissionService:
                 or submitted[field.field_key] is None
                 or submitted[field.field_key] == ""
                 or submitted[field.field_key] == []
+                or (
+                    field.field_type == "checkbox"
+                    and submitted[field.field_key] is False
+                )
             )
         )
         if missing:
@@ -95,16 +115,134 @@ class SubmissionService:
 
         unknown = sorted(set(submitted) - set(field_map))
         if unknown:
-            # The current frontend still has legacy static fields. Preserve
-            # compatibility until the dynamic form contract is completed, but
-            # make ignored input observable without logging submitted values.
-            logger.warning(
-                "Ignoring unknown registration fields for event %s: %s",
-                event_uuid,
-                ", ".join(unknown),
+            raise ActiFlowBusinessException(
+                code=ActiFlowErrorCode.INVALID_SUBMISSION_DATA,
+                message="Unknown or disabled registration fields",
+                status_code=422,
+                detail={"unknown_fields": unknown},
             )
 
+        for field_key, value in submitted.items():
+            SubmissionService._validate_field_value(field_map[field_key], value)
+
         return field_map
+
+    @staticmethod
+    def _invalid_field(field: EventField, reason: str) -> NoReturn:
+        raise ActiFlowBusinessException(
+            code=ActiFlowErrorCode.INVALID_SUBMISSION_DATA,
+            message=f"Invalid value for field: {field.field_key}",
+            status_code=422,
+            detail={"field_key": field.field_key, "reason": reason},
+        )
+
+    @staticmethod
+    def _option_values(field: EventField) -> set[str]:
+        if not isinstance(field.options, list):
+            return set()
+
+        values: set[str] = set()
+        for option in field.options:
+            if isinstance(option, str):
+                values.add(option)
+            elif isinstance(option, dict):
+                value = option.get("value", option.get("label"))
+                if isinstance(value, (str, int, float)) and not isinstance(
+                    value, bool
+                ):
+                    values.add(str(value))
+        return values
+
+    @staticmethod
+    def _validate_field_value(field: EventField, value: object) -> None:
+        field_type = field.field_type
+        if field_type not in SubmissionService.SUPPORTED_FIELD_TYPES:
+            SubmissionService._invalid_field(field, "unsupported_field_type")
+
+        if value is None or value == "" or value == []:
+            if field.required:
+                SubmissionService._invalid_field(field, "required")
+            return
+
+        validation = field.validation if isinstance(field.validation, dict) else {}
+
+        if field_type in {"text", "textarea", "email", "tel", "date"}:
+            if not isinstance(value, str):
+                SubmissionService._invalid_field(field, "must_be_string")
+
+            min_length = validation.get("min_length", 0)
+            max_length = validation.get(
+                "max_length",
+                SubmissionService.MAX_TEXT_LENGTH,
+            )
+            if not isinstance(min_length, int) or min_length < 0:
+                min_length = 0
+            if not isinstance(max_length, int) or max_length < 0:
+                max_length = SubmissionService.MAX_TEXT_LENGTH
+            max_length = min(max_length, SubmissionService.MAX_TEXT_LENGTH)
+
+            if len(value) < min_length:
+                SubmissionService._invalid_field(field, "too_short")
+            if len(value) > max_length:
+                SubmissionService._invalid_field(field, "too_long")
+
+            if field_type == "email":
+                try:
+                    validate_email(value, check_deliverability=False)
+                except EmailNotValidError:
+                    SubmissionService._invalid_field(field, "invalid_email")
+            elif field_type == "date":
+                try:
+                    date.fromisoformat(value)
+                except ValueError:
+                    SubmissionService._invalid_field(field, "invalid_date")
+            return
+
+        if field_type == "number":
+            if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+                SubmissionService._invalid_field(field, "must_be_number")
+            try:
+                number = Decimal(str(value))
+            except (InvalidOperation, ValueError):
+                SubmissionService._invalid_field(field, "must_be_number")
+            if not number.is_finite():
+                SubmissionService._invalid_field(field, "must_be_number")
+            for rule, operator in (
+                ("min", lambda candidate, limit: candidate < limit),
+                ("max", lambda candidate, limit: candidate > limit),
+            ):
+                if rule not in validation:
+                    continue
+                try:
+                    limit = Decimal(str(validation[rule]))
+                except (InvalidOperation, ValueError):
+                    continue
+                if operator(number, limit):
+                    SubmissionService._invalid_field(field, f"outside_{rule}")
+            return
+
+        allowed = SubmissionService._option_values(field)
+        if field_type in {"select", "radio"}:
+            if not isinstance(value, str):
+                SubmissionService._invalid_field(field, "must_be_string")
+            if not allowed or value not in allowed:
+                SubmissionService._invalid_field(field, "invalid_option")
+            return
+
+        if field_type == "checkbox":
+            if not allowed:
+                if not isinstance(value, bool):
+                    SubmissionService._invalid_field(field, "must_be_boolean")
+                return
+            if not isinstance(value, list):
+                SubmissionService._invalid_field(field, "must_be_list")
+            if len(value) > SubmissionService.MAX_CHECKBOX_VALUES:
+                SubmissionService._invalid_field(field, "too_many_values")
+            if (
+                any(not isinstance(item, str) or item not in allowed for item in value)
+                or len(value) != len(set(value))
+            ):
+                SubmissionService._invalid_field(field, "invalid_option")
 
     @staticmethod
     def register_event(

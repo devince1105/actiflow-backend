@@ -1,6 +1,6 @@
 # app/schemas/submission/submission_public.py
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
@@ -24,9 +24,12 @@ class SubmissionPublicCreate(BaseModel):
     """
 
     user_email: EmailStr
-    values: List[SubmissionValuePublicCreate]
+    values: List[SubmissionValuePublicCreate] = Field(
+        default_factory=list,
+        max_length=100,
+    )
 
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(default=None, max_length=5000)
     extra_data: Optional[Dict[str, Any]] = None
 
 

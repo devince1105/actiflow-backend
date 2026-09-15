@@ -4,7 +4,7 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.event.category.event_category_public import (
     EventCategoryPublic,
@@ -12,6 +12,7 @@ from app.schemas.event.category.event_category_public import (
 from app.schemas.organizer.public.organizer_public import (
     OrganizerPublic,
 )
+from app.schemas.event.field.event_field_create import EventFieldType
 
 # =====================================================
 # Time
@@ -48,6 +49,19 @@ class EventContentPublic(BaseModel):
     blocks: List[EventContentBlockPublic]
 
 
+class EventRegistrationFieldPublic(BaseModel):
+    uuid: str
+    field_key: str
+    label: str
+    placeholder: Optional[str] = None
+    description: Optional[str] = None
+    field_type: EventFieldType
+    required: bool = False
+    options: List[Any] = Field(default_factory=list)
+    validation: Dict[str, Any] = Field(default_factory=dict)
+    sort_order: int = 0
+
+
 # =====================================================
 # Public Event Detail
 # =====================================================
@@ -68,6 +82,9 @@ class EventDetailPublic(BaseModel):
 
     # ✅ 活動內容（Editor blocks）
     content: Optional[EventContentPublic] = None
+
+    # 唯一公開報名欄位契約；只包含 active/enabled/non-deleted fields。
+    fields: List[EventRegistrationFieldPublic] = Field(default_factory=list)
 
     # 容量控制
     max_capacity: int = 0
