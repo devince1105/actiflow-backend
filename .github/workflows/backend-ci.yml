@@ -28,11 +28,12 @@ jobs:
       DATABASE_URL: postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/actiflow_placeholder
       TEST_DATABASE_URL: postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/actiflow_test
       JWT_SECRET: ci-only-secret-with-at-least-32-characters
+      PYTHONPATH: .
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
